@@ -1,23 +1,15 @@
 {
   "name": "Tout Doux...",
-  "short_name": "Tout Doux...",
-  "start_url": "./",
+  "short_name": "Tout Doux",
+  "description": "Organisation quotidienne, énergie et rituels — Tout Doux...",
+  "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#14161C",
-  "theme_color": "#14161C",
+  "background_color": "#0B0810",
+  "theme_color": "#0B0810",
+  "orientation": "portrait",
   "icons": [
-    {
-      "src": "icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "any maskable"
-    }
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
   ]
 }
