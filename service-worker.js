@@ -1,7 +1,7 @@
 // Nom du cache aligné sur APP_VERSION (sly-todo.jsx) : change à chaque build,
 // ce qui suffit à invalider l'ancien cache automatiquement — plus besoin de
 // penser à un compteur séparé.
-const CACHE_NAME = "toutdoux-cache-2026-08-28-events-fix";
+const CACHE_NAME = "toutdoux-cache-2026-08-28-undated-badge";
 const ASSETS = [
   "./",
   "./index.html",
