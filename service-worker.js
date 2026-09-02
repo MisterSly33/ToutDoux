@@ -1,14 +1,5 @@
-// Nom du cache aligné sur APP_VERSION (sly-todo.jsx) : change à chaque build,
-// ce qui suffit à invalider l'ancien cache automatiquement — plus besoin de
-// penser à un compteur séparé.
-const CACHE_NAME = "toutdoux-cache-2026-08-28-hildegarde-hist";
-const ASSETS = [
-  "./",
-  "./index.html",
-  "./manifest.json",
-  "./icon-192.png",
-  "./icon-512.png",
-];
+const CACHE_NAME = "toutdoux-cache-2026-08-28-v17-fixes";
+const ASSETS = ["./", "./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -24,17 +15,12 @@ self.addEventListener("activate", (event) => {
   );
 });
 
-// Stratégie : réseau d'abord (pour avoir la dernière version dès qu'on est en ligne),
-// avec repli sur le cache si hors-ligne ou requête en échec.
 self.addEventListener("fetch", (event) => {
-  if (event.request.method !== "GET") return;
   event.respondWith(
-    fetch(event.request)
-      .then((res) => {
-        const copy = res.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
-        return res;
-      })
-      .catch(() => caches.match(event.request).then((res) => res || caches.match("./index.html")))
+    fetch(event.request).then((res) => {
+      const copy = res.clone();
+      caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+      return res;
+    }).catch(() => caches.match(event.request))
   );
 });
