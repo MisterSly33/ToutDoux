@@ -1,4 +1,4 @@
-const CACHE_NAME = "toutdoux-cache-2026-08-28-v20-chantiers2";
+const CACHE_NAME = "toutdoux-cache-2026-08-28-v21-neuro-followup";
 const ASSETS = ["./", "./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", (event) => {
