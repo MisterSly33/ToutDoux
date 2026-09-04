@@ -1,4 +1,4 @@
-const CACHE_NAME = "toutdoux-cache-2026-08-28-v24-linked-quiz";
+const CACHE_NAME = "toutdoux-cache-2026-08-28-v25-agenda-advance";
 const ASSETS = ["./", "./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", (event) => {
