@@ -1,4 +1,4 @@
-const CACHE_NAME = "toutdoux-cache-2026-08-28-v34-bottles-activities";
+const CACHE_NAME = "toutdoux-cache-2026-08-28-v35-menu-checklist-2lines";
 const ASSETS = ["./", "./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", (event) => {
