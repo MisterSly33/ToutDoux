@@ -15,7 +15,7 @@ if (typeof window !== "undefined") {
 }
 
 const STORAGE_KEY = "sly-todo-data";
-const APP_VERSION = "2026.08.28-37";
+const APP_VERSION = "2026.08.28-38";
 // Plafond de points dépensables (totalPoints − coffreSpent) : au-delà, les points ne s'accumulent plus.
 const POINTS_CAP = 10000;
 const flagColorOf = (t) => (t && t.kind === "prestation" ? "#8B5CF6" : t && t.subtype === "rdv" ? "#14B8A6" : "#F59E0B");
@@ -753,6 +753,8 @@ const SAINTES_FEM = new Set([
   "Justine","Pélagie","Édwige","Adeline","Céline","Geneviève","Aurélie","Léonard","Bénigne","Élisabeth","Cécile","Flora","Catherine","Delphine",
   "Barbara","Ninon","Fabienne","Lucie","Odile","Ninette","Gaby","Florence","Alice","Nina","Léa","Séverine","Elfriede","Adèle","Sabine"
 ]);
+// Prénoms masculins qui se terminent comme des prénoms féminins (Serge, Blaise, Claude...)
+const SAINTS_MASC_E = new Set(["Basile","Guillaume","Timothée","Blaise","Claude","Lazare","Modeste","Auguste","Rodrigue","Cyrille","Amédée","Isidore","Maxime","Paterne","Anselme","Alexandre","Fidèle","Philippe","Pacôme","Achille","Émile","Antoine","Élisée","Léonce","Silvère","Rodolphe","Jean-Baptiste","Anthelme","Irénée","Pierre","Arsène","Ignace","Alphonse","Jean-Marie","Dominique","Hippolyte","Hyacinthe","Christophe","Fabrice","Fiacre","Aristide","Grégoire","Adelphe","Apollinaire","Maurice","Côme","Jérôme","Serge","Juste","Narcisse","Théodore","Brice","Sidoine","Ambroise","Étienne","Sylvestre","Armistice","Fête"]);
 function saintDuJour(date) {
   const d = date || new Date();
   const m = d.getMonth();
@@ -762,7 +764,7 @@ function saintDuJour(date) {
   // Entrées spéciales sans préfixe
   if (/^(N-D|Notre|Présentation|Conversion|Annonciation|Assomption|Toussaint|Nativité|Épiphanie|Ascension|Pentecôte|Rameaux|Immaculée|Sacré)/i.test(name)) return name;
   const first = name.split(" ")[0];
-  const prefix = SAINTES_FEM.has(first) || /(e|a|ette|ine|elle)$/.test(first) ? "Ste" : "St";
+  const prefix = SAINTES_FEM.has(first) || (!SAINTS_MASC_E.has(first) && /(e|a|ette|ine|elle)$/.test(first)) ? "Ste" : "St";
   return `${prefix} ${name}`;
 }
 
@@ -9014,11 +9016,25 @@ function ThemeDetail({ theme, tasks, onBack, onEditTheme, onDeleteTheme, onAddTa
 }
 
 function Modal({ children, onClose }) {
+  // Sur mobile, le clavier virtuel recouvre le bas de l'écran : on suit la hauteur réellement
+  // visible (visualViewport) et on centre la fenêtre dedans, au lieu de la plaquer en bas.
+  const [vh, setVh] = useState(typeof window !== "undefined" && window.visualViewport ? window.visualViewport.height : null);
+  const [vTop, setVTop] = useState(0);
+  useEffect(() => {
+    const vv = typeof window !== "undefined" ? window.visualViewport : null;
+    if (!vv) return;
+    const upd = () => { setVh(vv.height); setVTop(vv.offsetTop || 0); };
+    upd();
+    vv.addEventListener("resize", upd);
+    vv.addEventListener("scroll", upd);
+    return () => { vv.removeEventListener("resize", upd); vv.removeEventListener("scroll", upd); };
+  }, []);
   return (
-    <div className="fixed inset-0 flex items-end sm:items-center justify-center z-50" style={{ background: "rgba(0,0,0,0.7)" }} onClick={onClose}>
+    <div className="fixed left-0 right-0 flex items-center justify-center z-50 px-3"
+      style={{ background: "rgba(0,0,0,0.7)", top: vh ? vTop : 0, height: vh ? vh : "100%", ...(vh ? {} : { bottom: 0 }) }} onClick={onClose}>
       <div
-        className="w-full sm:max-w-sm rounded-t-2xl sm:rounded-2xl p-5 overflow-y-auto overscroll-contain"
-        style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.text, maxHeight: "85vh" }}
+        className="w-full sm:max-w-sm rounded-2xl p-5 overflow-y-auto overscroll-contain"
+        style={{ background: C.surface, border: `1px solid ${C.border}`, color: C.text, maxHeight: vh ? vh - 24 : "85vh" }}
         onClick={(e) => e.stopPropagation()}
       >
         {children}
