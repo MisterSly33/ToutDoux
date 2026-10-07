@@ -15,7 +15,10 @@ if (typeof window !== "undefined") {
 }
 
 const STORAGE_KEY = "sly-todo-data";
-const APP_VERSION = "2026.08.28-36";
+const APP_VERSION = "2026.08.28-37";
+// Plafond de points dépensables (totalPoints − coffreSpent) : au-delà, les points ne s'accumulent plus.
+const POINTS_CAP = 10000;
+const flagColorOf = (t) => (t && t.kind === "prestation" ? "#8B5CF6" : t && t.subtype === "rdv" ? "#14B8A6" : "#F59E0B");
 
 // ── Pleines lunes ──
 // Calcule la phase lunaire (0 = nouvelle lune, 0.5 = pleine lune) pour une date.
@@ -1908,7 +1911,7 @@ function TodayDashboard({
             className="flex flex-col items-center justify-center rounded-xl px-2.5 py-1.5 shrink-0 active:scale-95 transition-transform"
             style={{ background: "#F59E0B1F", border: `1px solid #F59E0B55` }}>
             <TreasureChestIcon open={(coffreBalance || 0) > 0} size={18} />
-            <span className="text-[10px] font-bold mt-0.5" style={{ color: "#F59E0B" }}>{coffreBalance || 0}</span>
+            <span className="text-[10px] font-bold mt-0.5" style={{ color: (coffreBalance || 0) >= POINTS_CAP ? C.danger : "#F59E0B" }}>{(coffreBalance || 0) >= POINTS_CAP ? "MAX" : (coffreBalance || 0)}</span>
           </div>
         </button>
       </div>
@@ -2249,7 +2252,10 @@ function SlyTodo() {
 
   const persist = useCallback((next) => {
     setData((prev) => {
-      const resolved = typeof next === "function" ? next(prev) : next;
+      let resolved = typeof next === "function" ? next(prev) : next;
+      if (resolved && (resolved.totalPoints || 0) - (resolved.coffreSpent || 0) > POINTS_CAP) {
+        resolved = { ...resolved, totalPoints: (resolved.coffreSpent || 0) + POINTS_CAP };
+      }
       pendingRef.current = resolved;
       return resolved;
     });
@@ -2778,6 +2784,8 @@ function SlyTodo() {
             themeId: fields.themeId,
             title: fields.title,
             kind: fields.kind || "task",
+            subtype: fields.subtype || null,
+            showInAgenda: fields.showInAgenda !== false,
             createdAt: new Date().toISOString(),
             duration: fields.duration,
             time: fields.time || null,
@@ -3594,7 +3602,7 @@ function SlyTodo() {
     };
     reader.readAsText(file);
   };
-  const quickAdd = () => setModal({ type: "addTask", payload: { themeId: themes[0]?.id } });
+  const quickAdd = () => setModal({ type: "addWizard", payload: { themeId: themes[0]?.id } });
 
   // Navigation gérée par BottomNav
 
@@ -4213,7 +4221,7 @@ function SlyTodo() {
             tasks={tasks}
             themes={themes}
             onEdit={(t) => setModal({ type: "taskActions", payload: t })}
-            onAddOnDate={(dateISO) => setModal({ type: "addTask", payload: { themeId: themes[0]?.id, kind: "event", startDate: dateISO } })}
+            onAddOnDate={(dateISO) => setModal({ type: "addWizard", payload: { themeId: themes[0]?.id, startDate: dateISO } })}
             onToggleDone={toggleDone}
             onViewDetails={(t) => setModal({ type: "taskDetail", payload: t })}
           />
@@ -4256,7 +4264,7 @@ function SlyTodo() {
             onBack={() => setOpenTheme(null)}
             onEditTheme={(t) => setModal({ type: "editTheme", payload: t })}
             onDeleteTheme={deleteTheme}
-            onAddTask={() => setModal({ type: "addTask", payload: { themeId: openTheme } })}
+            onAddTask={() => setModal({ type: "addWizard", payload: { themeId: openTheme } })}
             onEditTask={(t) => setModal({ type: "taskActions", payload: t })}
             onDeleteTask={deleteTask}
             onToggleToday={toggleToday}
@@ -4425,6 +4433,16 @@ function SlyTodo() {
             );
           })()}
 
+          {modal.type === "addWizard" && (
+            <AddWizard
+              themes={themes}
+              initial={modal.payload}
+              gigRoles={settings?.gigRoles}
+              onCancel={() => setModal(null)}
+              onFinish={(fields) => { addTask(fields); setModal(null); }}
+              onComplete={(draft) => setModal({ type: "addTask", payload: draft })}
+            />
+          )}
           {modal.type === "addTask" && (
             <TaskForm
               themes={themes}
@@ -4647,7 +4665,7 @@ function FocusModeOverlay({ task, onDone, onAbandon }) {
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center px-6"
-      style={{ background: "rgba(11,8,16,0.97)" }}>
+      style={{ background: C.bg }}>
 
       <div className="text-xs uppercase tracking-widest mb-2" style={{ color: C.textGhost }}>Mode Focus</div>
       <div className="text-sm mb-6 text-center font-medium" style={{ color: C.textDim }}>{task.title}</div>
@@ -6371,6 +6389,15 @@ function CoffreView({ balance, rewards, history, onAdd, onEdit, onDelete, onClai
         <div className="text-xs uppercase tracking-widest mt-1" style={{ color: C.textGhost }}>Mon coffre</div>
         <div className="font-black mt-1" style={{ fontSize: 34, color: "#F59E0B" }}>{balance}</div>
         <div className="text-xs" style={{ color: C.textDim }}>points à dépenser</div>
+        {balance >= POINTS_CAP ? (
+          <div className="mt-3 rounded-xl px-3 py-2 text-sm font-bold" style={{ background: C.danger, color: "#FFFFFF" }}>
+            ⚠️ Plafond de {POINTS_CAP.toLocaleString("fr-FR")} pts atteint : les nouveaux points ne s'ajoutent plus. Il est temps de tout dépenser !
+          </div>
+        ) : balance >= POINTS_CAP * 0.9 ? (
+          <div className="mt-3 rounded-xl px-3 py-2 text-xs font-semibold" style={{ background: "#F59E0B33", color: C.text, border: "1px solid #F59E0B" }}>
+            Bientôt au plafond ({POINTS_CAP.toLocaleString("fr-FR")} pts) : pense à te faire plaisir !
+          </div>
+        ) : null}
       </div>
 
       {/* Récompenses */}
@@ -6941,7 +6968,7 @@ function TodayView({ tasks, themes, pulseId, onToggleDone, onRemove, onMove, onE
     const theme = themes.find((th) => th.id === t.themeId);
     const isWellbeing = theme?.wellbeing;
     const isEvent = t.kind === "event" || t.kind === "prestation";
-    const flagColor = t.kind === "prestation" ? "#8B5CF6" : "#F59E0B";
+    const flagColor = flagColorOf(t);
     const canFocus = !t.done && !t.cancelled && !isEvent;
     const isSelected = selectedIds.has(t.id);
     return (
@@ -7406,8 +7433,8 @@ function AgendaView({ tasks, themes, onEdit, onAddOnDate, onToggleDone, onViewDe
       >
         {!isCancelled && (t.kind === "event" || t.kind === "prestation") && (
           <button onClick={(e) => { e.stopPropagation(); onToggleDone(t.id); }} className="shrink-0" aria-label={isDoneEvent ? "Marquer non fait" : "Valider"} title={isDoneEvent ? "Marquer non fait" : "Valider"}>
-            <div className="w-6 h-6 rounded-lg flex items-center justify-center" style={{ background: isDoneEvent ? "#22C55E" : (t.kind === "prestation" ? "#8B5CF6" : "#F59E0B") + "22" }}>
-              {isDoneEvent ? <Check size={14} color="#0B0810" strokeWidth={3} /> : <Flag size={13} style={{ color: t.kind === "prestation" ? "#8B5CF6" : "#F59E0B" }} fill={t.kind === "prestation" ? "#8B5CF6" : "#F59E0B"} />}
+            <div className="w-6 h-6 rounded-lg flex items-center justify-center" style={{ background: isDoneEvent ? "#22C55E" : flagColorOf(t) + "22" }}>
+              {isDoneEvent ? <Check size={14} color="#0B0810" strokeWidth={3} /> : <Flag size={13} style={{ color: flagColorOf(t) }} fill={flagColorOf(t)} />}
             </div>
           </button>
         )}
@@ -8142,7 +8169,7 @@ function ChecklistsView({ checklists, onOpen, onAddChecklist, onRenameChecklist,
               <div className="text-[11px]" style={{ color: C.textGhost }}>{total} objet{total > 1 ? "s" : ""}{!isTpl && total > 0 ? ` · ${ok}/${total} prêts` : ""}</div>
               {linkedTask && (
                 <div className="text-[11px] flex items-center gap-1 mt-0.5" style={{ color: C.accentLight }}>
-                  🔗 <Flag size={10} fill={linkedTask.kind === "prestation" ? "#8B5CF6" : "#F59E0B"} style={{ color: linkedTask.kind === "prestation" ? "#8B5CF6" : "#F59E0B" }} /> {linkedTask.title}
+                  🔗 <Flag size={10} fill={flagColorOf(linkedTask)} style={{ color: flagColorOf(linkedTask) }} /> {linkedTask.title}
                 </div>
               )}
             </button>
@@ -9377,6 +9404,267 @@ function QuizPlayer({ theme, onClose, onFinish, sound, quizSeenLog }) {
   );
 }
 
+// ═════════════════════════════════════════════════════════════════
+// 📅 Bloc date (partagé entre la fiche complète et l'assistant de création)
+// ═════════════════════════════════════════════════════════════════
+function DateBlock({ kind, isEv, startDate, setStartDate, endDate, setEndDate, showEndDate, setShowEndDate, allDay, setAllDay, time, setTime, durationMode, setDurationMode, duration, setDuration, showInAgenda, setShowInAgenda, toConfirm, setToConfirm, onEndDateSet }) {
+  const [showDurationDetail, setShowDurationDetail] = useState(false);
+  const Toggle = ({ on, onClick, label }) => (
+    <label className="flex items-center gap-2.5 cursor-pointer select-none" onClick={onClick}>
+      <div className="w-9 h-5 rounded-full flex items-center px-0.5 shrink-0"
+        style={{ background: on ? C.accent : C.borderStrong, justifyContent: on ? "flex-end" : "flex-start", transition: "all 0.2s ease" }}>
+        <div className="w-4 h-4 rounded-full" style={{ background: C.text }} />
+      </div>
+      <span className="text-sm" style={{ color: C.text }}>{label}</span>
+    </label>
+  );
+  const today = todayISODate();
+  const tomorrow = addDaysISO(1);
+  const state = startDate === "" ? "none" : startDate === today ? "today" : startDate === tomorrow ? "tomorrow" : "dated";
+  const META = {
+    none:     { label: "Pas de date", next: today },
+    today:    { label: "Aujourd'hui",  next: tomorrow },
+    tomorrow: { label: "Demain",       next: "" },
+    dated:    { label: "Daté",         next: "" },
+  };
+  const m = META[state];
+  return (
+    <div className="rounded-xl p-3 space-y-3" style={{ background: C.surfaceRaised, border: `1px solid ${C.border}` }}>
+      <div className="flex items-center gap-2">
+        <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)}
+          className="flex-1 min-w-0 rounded-md px-3 py-2 text-sm outline-none" style={{ background: C.bg, border: `1px solid ${C.borderStrong}`, color: C.text }} />
+        <button type="button" onClick={() => setStartDate(m.next)}
+          className="px-3 py-2 rounded-md text-xs font-semibold shrink-0"
+          style={{ background: state === "none" ? "transparent" : C.accent, color: state === "none" ? C.textDim : C.bg, border: `1px solid ${state === "none" ? C.borderStrong : C.accent}` }}>
+          {m.label}
+        </button>
+        {!showEndDate && (
+          <button type="button" onClick={() => setShowEndDate(true)} title="Ajouter une date de fin"
+            className="w-9 h-9 rounded-md flex items-center justify-center shrink-0" style={{ border: `1px solid ${C.borderStrong}`, color: C.textDim }}>
+            <Plus size={16} />
+          </button>
+        )}
+      </div>
+      {showEndDate && (
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-xs" style={{ color: C.textDim }}>Date de fin</span>
+            <button type="button" onClick={() => { setShowEndDate(false); setEndDate(""); }} className="text-[11px] font-semibold" style={{ color: C.textGhost }}>✕ Retirer</button>
+          </div>
+          <input type="date" value={endDate} min={startDate || undefined}
+            onChange={(e) => { setEndDate(e.target.value); if (e.target.value && onEndDateSet) onEndDateSet(); }}
+            className="w-full rounded-md px-3 py-2 text-sm outline-none" style={{ background: C.bg, border: `1px solid ${C.accent}`, color: C.text }} />
+        </div>
+      )}
+
+      <div className="flex items-center gap-3">
+        {!allDay && (
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <span className="text-xs shrink-0" style={{ color: C.textDim }}>Heure</span>
+            <input type="time" value={time} onChange={(e) => setTime(e.target.value)}
+              className="flex-1 min-w-0 rounded-md px-3 py-2 text-sm outline-none" style={{ background: C.bg, border: `1px solid ${C.borderStrong}`, color: C.text }} />
+          </div>
+        )}
+        <div className={allDay ? "" : "shrink-0"}>
+          <Toggle on={allDay} onClick={() => setAllDay(!allDay)} label="Toute la journée" />
+        </div>
+      </div>
+
+      {!allDay && (
+        <div className="flex items-center gap-2">
+          <span className="text-xs shrink-0" style={{ color: C.textDim }}>Durée</span>
+          <button type="button" onClick={() => setDurationMode(durationMode === "brief" ? "fixed" : "brief")}
+            className="px-3 py-1.5 rounded-md text-xs font-semibold shrink-0"
+            style={{ background: durationMode === "brief" ? C.accent : "transparent", color: durationMode === "brief" ? C.bg : C.textDim, border: `1px solid ${durationMode === "brief" ? C.accent : C.borderStrong}` }}>
+            Brève
+          </button>
+          {durationMode !== "brief" && (
+            <button type="button" onClick={() => setShowDurationDetail((v) => !v)}
+              className="flex-1 px-3 py-1.5 rounded-md text-xs font-semibold text-left"
+              style={{ background: "transparent", color: C.text, border: `1px solid ${C.borderStrong}` }}>
+              {duration} min {showDurationDetail ? "▲" : "▼"}
+            </button>
+          )}
+        </div>
+      )}
+      {!allDay && durationMode !== "brief" && showDurationDetail && (
+        <DurationPicker value={duration} onChange={setDuration} />
+      )}
+
+      <Toggle on={showInAgenda} onClick={() => setShowInAgenda(!showInAgenda)} label="Dans l'agenda" />
+      {isEv && <Toggle on={toConfirm} onClick={() => setToConfirm(!toConfirm)} label="À confirmer" />}
+    </div>
+  );
+}
+
+// ═════════════════════════════════════════════════════════════════
+// ➕ Assistant de création en cascade : Type → Désignation → Date → Fin
+// ═════════════════════════════════════════════════════════════════
+function AddWizard({ themes, initial, gigRoles, onCancel, onFinish, onComplete }) {
+  const [step, setStep] = useState(0);
+  const [kind, setKind] = useState(null);
+  const [title, setTitle] = useState("");
+  const [themeId, setThemeId] = useState(initial?.themeId || themes[0]?.id);
+  const [showTheme, setShowTheme] = useState(false);
+  const [startDate, setStartDate] = useState(initial?.startDate || "");
+  const [endDate, setEndDate] = useState("");
+  const [showEndDate, setShowEndDate] = useState(false);
+  const [allDay, setAllDay] = useState(false);
+  const [time, setTime] = useState("");
+  const [durationMode, setDurationMode] = useState("unknown");
+  const [duration, setDuration] = useState(15);
+  const [showInAgenda, setShowInAgenda] = useState(true);
+  const [toConfirm, setToConfirm] = useState(false);
+
+  const TYPES = [
+    { id: "task",       emoji: "📋", label: "Tâche",       color: C.accent },
+    { id: "event",      emoji: "🚩", label: "Événement",   color: "#F59E0B" },
+    { id: "rdv",        emoji: "🤝", label: "Rendez-vous", color: "#14B8A6" },
+    { id: "prestation", emoji: "🎧", label: "Prestation",  color: "#8B5CF6" },
+  ];
+  const meta = TYPES.find((t) => t.id === kind);
+  const isEv = kind === "event" || kind === "rdv" || kind === "prestation";
+  const realKind = kind === "rdv" ? "event" : kind;
+  const finalDuration = durationMode === "brief" ? 1 : duration;
+
+  const buildFields = () => ({
+    title: title.trim(),
+    kind: realKind,
+    subtype: kind === "rdv" ? "rdv" : null,
+    duration: finalDuration,
+    time,
+    themeId,
+    urgency: kind === "task" ? 2 : null,
+    recurrence: null,
+    startDate: startDate || null,
+    endDate: endDate || null,
+    dueDate: null,
+    allDay,
+    points: null,
+    contacts: null,
+    showInAgenda,
+    notes: null,
+    gigRole: kind === "prestation" ? (gigRoles || DEFAULT_GIG_ROLES)[0] : null,
+    gigLocation: kind === "prestation" ? { address: "", city: "", zip: "" } : null,
+    gigSchedule: kind === "prestation" ? [] : null,
+    checklistId: null,
+    gigPayment: null,
+    gigSettled: false,
+    eventStatus: isEv ? (toConfirm ? "option" : "confirme") : null,
+    organizer: null,
+    playlists: null,
+  });
+  const buildDraft = () => ({
+    themeId, title: title.trim(), kind: realKind, subtype: kind === "rdv" ? "rdv" : null,
+    startDate: startDate || null, endDate: endDate || null, allDay, time,
+    duration: durationMode === "brief" ? null : duration, showInAgenda,
+    eventStatus: isEv ? (toConfirm ? "option" : "confirme") : null,
+  });
+
+  const canGo = title.trim().length > 0;
+  const BtnRow = ({ children }) => <div className="flex gap-2 pt-1">{children}</div>;
+  const Ghost = ({ onClick, children }) => (
+    <button type="button" onClick={onClick} className="flex-1 py-2.5 rounded-md text-sm font-semibold"
+      style={{ border: `1px solid ${C.borderStrong}`, color: C.textDim }}>{children}</button>
+  );
+  const Main = ({ onClick, disabled, children }) => (
+    <button type="button" disabled={disabled} onClick={onClick} className="flex-1 py-2.5 rounded-md text-sm font-semibold disabled:opacity-40"
+      style={{ background: C.accent, color: C.bg }}>{children}</button>
+  );
+  const Header = ({ children, back }) => (
+    <div className="flex items-center gap-2">
+      {back && <button type="button" onClick={back} style={{ color: C.textDim }} aria-label="Retour"><ChevronLeft size={20} /></button>}
+      <h3 className="text-sm font-semibold flex-1" style={{ color: C.textDim }}>{children}</h3>
+      {meta && step > 0 && <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: meta.color, color: "#0B0810" }}>{meta.emoji} {meta.label}</span>}
+    </div>
+  );
+
+  if (step === 0) {
+    return (
+      <div className="space-y-4">
+        <Header>Que veux-tu ajouter ?</Header>
+        <div className="grid grid-cols-2 gap-3">
+          {TYPES.map((t) => (
+            <button key={t.id} type="button" onClick={() => { setKind(t.id); setStep(1); }}
+              className="rounded-xl py-5 flex flex-col items-center gap-1.5 font-semibold"
+              style={{ background: C.surfaceRaised, border: `2px solid ${t.color}`, color: C.text }}>
+              <span style={{ fontSize: 28 }}>{t.emoji}</span>
+              <span className="text-sm">{t.label}</span>
+            </button>
+          ))}
+        </div>
+        <BtnRow><Ghost onClick={onCancel}>Annuler</Ghost></BtnRow>
+      </div>
+    );
+  }
+  if (step === 1) {
+    return (
+      <div className="space-y-4">
+        <Header back={() => setStep(0)}>Désignation</Header>
+        <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Désignation"
+          onKeyDown={(e) => { if (e.key === "Enter" && canGo) setStep(2); }}
+          className="w-full rounded-md px-3 py-2.5 text-base outline-none" style={{ background: C.bg, border: `1px solid ${C.borderStrong}`, color: C.text }} />
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={() => setShowTheme((v) => !v)}
+            className="px-3 py-1.5 rounded-md text-xs font-semibold shrink-0"
+            style={{ background: showTheme ? C.accent : "transparent", color: showTheme ? C.bg : C.textDim, border: `1px solid ${showTheme ? C.accent : C.borderStrong}` }}>
+            📁 Dossier
+          </button>
+          {showTheme ? (
+            <select value={themeId} onChange={(e) => setThemeId(e.target.value)}
+              className="flex-1 min-w-0 rounded-md px-2 py-2 text-xs outline-none" style={{ background: C.bg, border: `1px solid ${C.borderStrong}`, color: C.text }}>
+              {themes.map((th) => <option key={th.id} value={th.id}>{th.name}</option>)}
+            </select>
+          ) : (
+            <span className="text-xs" style={{ color: C.textGhost }}>{themes.find((th) => th.id === themeId)?.name || ""}</span>
+          )}
+        </div>
+        <BtnRow>
+          <Ghost onClick={() => onFinish(buildFields())}>Finir</Ghost>
+          <Main disabled={!canGo} onClick={() => setStep(2)}>Continuer</Main>
+        </BtnRow>
+      </div>
+    );
+  }
+  if (step === 2) {
+    return (
+      <div className="space-y-4">
+        <Header back={() => setStep(1)}>Date et heure</Header>
+        <div className="text-sm font-semibold truncate" style={{ color: C.text }}>{title}</div>
+        <DateBlock kind={kind} isEv={isEv}
+          startDate={startDate} setStartDate={setStartDate} endDate={endDate} setEndDate={setEndDate}
+          showEndDate={showEndDate} setShowEndDate={setShowEndDate}
+          allDay={allDay} setAllDay={setAllDay} time={time} setTime={setTime}
+          durationMode={durationMode} setDurationMode={setDurationMode} duration={duration} setDuration={setDuration}
+          showInAgenda={showInAgenda} setShowInAgenda={setShowInAgenda}
+          toConfirm={toConfirm} setToConfirm={setToConfirm} onEndDateSet={() => {}} />
+        <BtnRow>
+          <Ghost onClick={() => onFinish(buildFields())}>Finir</Ghost>
+          <Main onClick={() => setStep(3)}>Continuer</Main>
+        </BtnRow>
+      </div>
+    );
+  }
+  const dateTxt = startDate ? new Date(startDate + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }) : "Sans date";
+  return (
+    <div className="space-y-4">
+      <Header back={() => setStep(2)}>Tout est prêt</Header>
+      <div className="rounded-xl p-3 space-y-1" style={{ background: C.surfaceRaised, border: `1px solid ${C.border}` }}>
+        <div className="text-base font-semibold" style={{ color: C.text }}>{title}</div>
+        <div className="text-xs" style={{ color: C.textDim }}>
+          {dateTxt}{endDate ? ` → ${new Date(endDate + "T12:00:00").toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}` : ""}
+          {allDay ? " · toute la journée" : time ? ` · ${time}` : ""}
+          {isEv && toConfirm ? " · à confirmer" : ""}
+        </div>
+      </div>
+      <BtnRow>
+        <Ghost onClick={() => onComplete(buildDraft())}>Compléter la fiche</Ghost>
+        <Main onClick={() => onFinish(buildFields())}>Finir</Main>
+      </BtnRow>
+    </div>
+  );
+}
+
 function TaskForm({ themes, initial, onCancel, onSave, onDelete, checklists, gigRoles, onAddGigRole, onCreateChecklist }) {
   const isNew = !initial?.id;
   const [title, setTitle] = useState(initial?.title || "");
@@ -9398,9 +9686,9 @@ function TaskForm({ themes, initial, onCancel, onSave, onDelete, checklists, gig
   const [dueDate, setDueDate] = useState(initial?.dueDate || "");
   const [allDay, setAllDay] = useState(!!initial?.allDay);
   const [showEndDate, setShowEndDate] = useState(!!initial?.endDate);
-  const [showDurationDetail, setShowDurationDetail] = useState(false);
   const [notes, setNotes] = useState(initial?.notes || "");
-  const [kind, setKind] = useState(initial?.kind || "task");
+  const [kind, setKind] = useState(initial?.kind === "event" && initial?.subtype === "rdv" ? "rdv" : (initial?.kind || "task"));
+  const isEv = kind === "event" || kind === "rdv" || kind === "prestation";
   // Points : null = auto (selon durée), sinon valeur personnalisée
   const [customPoints, setCustomPoints] = useState(typeof initial?.points === "number" ? initial.points : null);
   // Contacts associés : [{ name, tel }]
@@ -9473,7 +9761,8 @@ function TaskForm({ themes, initial, onCancel, onSave, onDelete, checklists, gig
   const handleSave = () => {
     onSave({
       title: title.trim(),
-      kind,
+      kind: kind === "rdv" ? "event" : kind,
+      subtype: kind === "rdv" ? "rdv" : null,
       duration: finalDuration,
       time,
       themeId,
@@ -9490,21 +9779,22 @@ function TaskForm({ themes, initial, onCancel, onSave, onDelete, checklists, gig
       gigRole: kind === "prestation" ? gigRole : null,
       gigLocation: kind === "prestation" ? { address: gigAddress.trim(), city: gigCity.trim(), zip: gigZip.trim() } : null,
       gigSchedule: kind === "prestation" ? gigSchedule : null,
-      checklistId: (kind === "event" || kind === "prestation" || kind === "chantier" || kind === "task") ? checklistId : null,
+      checklistId: (isEv || kind === "chantier" || kind === "task") ? checklistId : null,
       gigPayment: kind === "prestation" && gigPayment !== "" ? Number(gigPayment) : null,
       gigSettled: kind === "prestation" ? gigSettled : false,
-      eventStatus: (kind === "event" || kind === "prestation") ? eventStatus : null,
-      organizer: (kind === "event" || kind === "prestation") ? organizer : null,
-      playlists: (kind === "event" || kind === "prestation") && playlists.length ? playlists : null,
+      eventStatus: isEv ? eventStatus : null,
+      organizer: isEv ? organizer : null,
+      playlists: isEv && playlists.length ? playlists : null,
     });
   };
 
-  const KIND_LABELS = { task: "tâche", event: "événement", prestation: "prestation", chantier: "tâche au long cours" };
+  const KIND_LABELS = { task: "tâche", event: "événement", rdv: "rendez-vous", prestation: "prestation", chantier: "tâche au long cours" };
   const kindLabel = KIND_LABELS[kind] || "tâche";
-  const KIND_CYCLE = ["task", "event", "prestation", "chantier"];
+  const KIND_CYCLE = ["task", "event", "rdv", "prestation", "chantier"];
   const KIND_META = {
     task:       { label: "📋 Tâche",       bg: C.accent,   fg: C.bg },
     event:      { label: "🚩 Événement",   bg: "#F59E0B",  fg: "#0B0810" },
+    rdv:        { label: "🤝 Rendez-vous", bg: "#14B8A6",  fg: "#0B0810" },
     prestation: { label: "🚩 Prestation",  bg: "#8B5CF6",  fg: "#FFFFFF" },
     chantier:   { label: "🧭 Long cours",   bg: "#38BDF8",  fg: "#0B0810" },
   };
@@ -9523,21 +9813,6 @@ function TaskForm({ themes, initial, onCancel, onSave, onDelete, checklists, gig
           {themes.map((th) => <option key={th.id} value={th.id}>{th.name}</option>)}
         </select>
       </div>
-
-      {(kind === "event" || kind === "prestation") && (
-        <div className="flex gap-2">
-          <button type="button" onClick={() => setEventStatus("option")}
-            className="flex-1 py-1.5 rounded-md text-xs font-semibold"
-            style={{ background: eventStatus === "option" ? "#F59E0B" : "transparent", color: eventStatus === "option" ? "#0B0810" : C.textDim, border: `1px solid ${eventStatus === "option" ? "#F59E0B" : C.borderStrong}` }}>
-            🕓 Option
-          </button>
-          <button type="button" onClick={() => setEventStatus("confirme")}
-            className="flex-1 py-1.5 rounded-md text-xs font-semibold"
-            style={{ background: eventStatus === "confirme" ? "#22C55E" : "transparent", color: eventStatus === "confirme" ? "#0B0810" : C.textDim, border: `1px solid ${eventStatus === "confirme" ? "#22C55E" : C.borderStrong}` }}>
-            ✓ Confirmé
-          </button>
-        </div>
-      )}
 
       <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Désignation"
         className="w-full rounded-md px-3 py-2 text-base outline-none" style={{ background: C.bg, border: `1px solid ${C.borderStrong}`, color: C.text }} />
@@ -9629,87 +9904,15 @@ function TaskForm({ themes, initial, onCancel, onSave, onDelete, checklists, gig
       )}
 
       {kind !== "chantier" && (
-      <div className="rounded-xl p-3 space-y-3" style={{ background: C.surfaceRaised, border: `1px solid ${C.border}` }}>
-        <div className="flex items-center gap-2">
-          <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)}
-            className="flex-1 rounded-md px-3 py-2 text-sm outline-none" style={{ background: C.bg, border: `1px solid ${C.borderStrong}`, color: C.text }} />
-          {(() => {
-            const today = todayISODate();
-            const tomorrow = addDaysISO(1);
-            const state = startDate === "" ? "none" : startDate === today ? "today" : startDate === tomorrow ? "tomorrow" : "dated";
-            const META = {
-              none:     { label: "Pas de date", next: today },
-              today:    { label: "Aujourd'hui",  next: tomorrow },
-              tomorrow: { label: "Demain",       next: "" },
-              dated:    { label: "Daté",         next: "" },
-            };
-            const m = META[state];
-            return (
-              <button type="button" onClick={() => setStartDate(m.next)}
-                className="px-3 py-2 rounded-md text-xs font-semibold shrink-0"
-                style={{
-                  background: state === "none" ? "transparent" : C.accent,
-                  color: state === "none" ? C.textDim : C.bg,
-                  border: `1px solid ${state === "none" ? C.borderStrong : C.accent}`,
-                }}>
-                {m.label}
-              </button>
-            );
-          })()}
-          {!showEndDate && (
-            <button type="button" onClick={() => setShowEndDate(true)} title="Ajouter une date de fin"
-              className="w-9 h-9 rounded-md flex items-center justify-center shrink-0" style={{ border: `1px solid ${C.borderStrong}`, color: C.textDim }}>
-              <Plus size={16} />
-            </button>
-          )}
-        </div>
-        {showEndDate && (
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-xs" style={{ color: C.textDim }}>Date de fin</span>
-              <button type="button" onClick={() => { setShowEndDate(false); setEndDate(""); }} className="text-[11px] font-semibold" style={{ color: C.textGhost }}>
-                ✕ Retirer
-              </button>
-            </div>
-            <input type="date" value={endDate} min={startDate || undefined}
-              onChange={(e) => { setEndDate(e.target.value); if (e.target.value && kind === "task") setKind("event"); }}
-              className="w-full rounded-md px-3 py-2 text-sm outline-none" style={{ background: C.bg, border: `1px solid ${C.accent}`, color: C.text }} />
-          </div>
-        )}
-
-        <label className="flex items-center gap-2.5 cursor-pointer select-none" onClick={() => setAllDay((v) => !v)}>
-          <div
-            className="w-9 h-5 rounded-full flex items-center px-0.5 shrink-0"
-            style={{ background: allDay ? C.accent : C.borderStrong, justifyContent: allDay ? "flex-end" : "flex-start", transition: "all 0.2s ease" }}
-          >
-            <div className="w-4 h-4 rounded-full" style={{ background: C.text }} />
-          </div>
-          <span className="text-sm" style={{ color: C.text }}>Toute la journée</span>
-        </label>
-
-        {!allDay && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs shrink-0" style={{ color: C.textDim }}>Durée</span>
-            <button type="button" onClick={() => setDurationMode(durationMode === "brief" ? "fixed" : "brief")}
-              className="px-3 py-1.5 rounded-md text-xs font-semibold shrink-0"
-              style={{ background: durationMode === "brief" ? C.accent : "transparent", color: durationMode === "brief" ? C.bg : C.textDim, border: `1px solid ${durationMode === "brief" ? C.accent : C.borderStrong}` }}>
-              Brève
-            </button>
-            {durationMode !== "brief" && (
-              <button type="button" onClick={() => setShowDurationDetail((v) => !v)}
-                className="flex-1 px-3 py-1.5 rounded-md text-xs font-semibold text-left"
-                style={{ background: "transparent", color: C.text, border: `1px solid ${C.borderStrong}` }}>
-                {duration} min {showDurationDetail ? "▲" : "▼"}
-              </button>
-            )}
-          </div>
-        )}
-        {!allDay && durationMode !== "brief" && showDurationDetail && (
-          <DurationPicker value={duration} onChange={setDuration} />
-        )}
-      </div>
+        <DateBlock kind={kind} isEv={isEv}
+          startDate={startDate} setStartDate={setStartDate} endDate={endDate} setEndDate={setEndDate}
+          showEndDate={showEndDate} setShowEndDate={setShowEndDate}
+          allDay={allDay} setAllDay={setAllDay} time={time} setTime={setTime}
+          durationMode={durationMode} setDurationMode={setDurationMode} duration={duration} setDuration={setDuration}
+          showInAgenda={showInAgenda} setShowInAgenda={setShowInAgenda}
+          toConfirm={eventStatus === "option"} setToConfirm={(v) => setEventStatus(v ? "option" : "confirme")}
+          onEndDateSet={() => { if (kind === "task") setKind("event"); }} />
       )}
-
 
       {kind === "task" && (
         <div>
@@ -9772,22 +9975,6 @@ function TaskForm({ themes, initial, onCancel, onSave, onDelete, checklists, gig
         </div>
       )}
 
-      {!allDay && (
-        <div className="grid grid-cols-2 gap-3 items-end">
-          <div>
-            <div className="text-xs mb-1.5" style={{ color: C.textDim }}>Heure (optionnel)</div>
-            <input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="w-full rounded-md px-3 py-2 text-sm outline-none" style={{ background: C.bg, border: `1px solid ${C.borderStrong}`, color: C.text }} />
-          </div>
-          <label className="flex items-center gap-2 cursor-pointer select-none pb-2" onClick={() => setShowInAgenda((v) => !v)}>
-            <div className="w-9 h-5 rounded-full flex items-center px-0.5 shrink-0"
-              style={{ background: showInAgenda ? C.accent : C.borderStrong, justifyContent: showInAgenda ? "flex-end" : "flex-start", transition: "all 0.2s" }}>
-              <div className="w-4 h-4 rounded-full" style={{ background: C.text }} />
-            </div>
-            <span className="text-xs" style={{ color: C.textDim }}>Dans l'agenda</span>
-          </label>
-        </div>
-      )}
-
       {/* Contacts associés (masqué pour l'instant — pas encore utile au quotidien) */}
       {contacts.length > 0 && (
       <div>
@@ -9827,7 +10014,7 @@ function TaskForm({ themes, initial, onCancel, onSave, onDelete, checklists, gig
       </div>
       )}
 
-      {(kind === "event" || kind === "prestation") && (
+      {isEv && (
         <div className="rounded-xl p-3" style={{ background: C.surfaceRaised, border: `1px solid ${C.border}` }}>
           <div className="text-xs mb-2" style={{ color: C.textDim }}>Organisateur <span style={{ color: C.textGhost }}>(client, contact...)</span></div>
           <input value={organizer || ""} onChange={(e) => setOrganizer(e.target.value || null)} placeholder="Ex : Julie & Marc, Mairie de Sore..."
@@ -9835,7 +10022,7 @@ function TaskForm({ themes, initial, onCancel, onSave, onDelete, checklists, gig
         </div>
       )}
 
-      {(kind === "event" || kind === "prestation" || kind === "chantier" || kind === "task") && (
+      {(isEv || kind === "chantier" || kind === "task") && (
         <div className="rounded-xl p-3" style={{ background: C.surfaceRaised, border: `1px solid ${C.border}` }}>
           <div className="text-xs mb-2" style={{ color: C.textDim }}>Checklist liée</div>
           <div className="flex gap-2">
@@ -10027,7 +10214,7 @@ function GaugeDetailModal({ kind, percent, doneCount, totalCount, briefCount, on
 function TaskDetailView({ task, themes, checklists, onClose, onEdit }) {
   const theme = themes.find((th) => th.id === task.themeId);
   const linkedChecklist = (checklists || []).find((c) => c.id === task.checklistId);
-  const KIND_LABELS = { task: "📋 Tâche", event: "🚩 Événement", prestation: "🚩 Prestation", chantier: "🧭 Tâche au long cours" };
+  const KIND_LABELS = { task: "📋 Tâche", event: "🚩 Événement", rdv: "🤝 Rendez-vous", prestation: "🚩 Prestation", chantier: "🧭 Tâche au long cours" };
   const Row = ({ label, children }) => (
     <div className="flex items-start justify-between gap-3 py-2" style={{ borderBottom: `1px solid ${C.border}` }}>
       <span className="text-xs shrink-0" style={{ color: C.textFaint }}>{label}</span>
@@ -10040,7 +10227,7 @@ function TaskDetailView({ task, themes, checklists, onClose, onEdit }) {
         <h3 className="text-base font-bold" style={{ color: C.text }}>{task.title}</h3>
         <button onClick={onClose} className="shrink-0 p-1" style={{ color: C.textDim }} aria-label="Fermer"><X size={18} /></button>
       </div>
-      <Row label="Type">{KIND_LABELS[task.kind] || "📋 Tâche"}</Row>
+      <Row label="Type">{KIND_LABELS[task.subtype === "rdv" ? "rdv" : task.kind] || "📋 Tâche"}</Row>
       {theme && <Row label="Rubrique"><span style={{ color: theme.color }}>{theme.name}</span></Row>}
       {(task.startDate || task.dueDate) ? (
         <Row label={task.kind === "task" ? "Échéance" : "Date"}>{formatDateFr(task.dueDate || task.startDate)}{task.endDate ? ` → ${formatDateFr(task.endDate)}` : ""}</Row>
