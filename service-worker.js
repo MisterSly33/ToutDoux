@@ -1,4 +1,4 @@
-const CACHE_NAME = "toutdoux-cache-2026-10-07-v41-dossiers-cliquables";
+const CACHE_NAME = "toutdoux-cache-2026-10-07-v42-panneau-version";
 const ASSETS = ["./", "./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", (event) => {
