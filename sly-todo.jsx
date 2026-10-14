@@ -15,7 +15,7 @@ if (typeof window !== "undefined") {
 }
 
 const STORAGE_KEY = "sly-todo-data";
-const APP_VERSION = "2026.08.28-42";
+const APP_VERSION = "2026.08.28-43";
 // Plafond de points dépensables (totalPoints − coffreSpent) : au-delà, les points ne s'accumulent plus.
 const POINTS_CAP = 10000;
 // Panneau « route sinueuse » (icône des prestations)
@@ -9439,68 +9439,88 @@ function QuizPlayer({ theme, onClose, onFinish, sound, quizSeenLog }) {
 // 📁 Choix du dossier : pastilles cliquables + ajout / modification sur place
 // ═════════════════════════════════════════════════════════════════
 function ThemePicker({ themes, value, onChange, onAdd, onEdit }) {
-  const [mode, setMode] = useState(null); // null | "add" | "edit"
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState(null); // null | { mode: "add" | "edit", id? }
   const [name, setName] = useState("");
   const [color, setColor] = useState(PRESET_COLORS[0].value);
   const current = themes.find((t) => t.id === value);
-  const open = (m) => {
-    setMode(m);
-    setName(m === "edit" ? (current?.name || "") : "");
-    setColor(m === "edit" ? (current?.color || PRESET_COLORS[0].value) : PRESET_COLORS[0].value);
+  const openForm = (mode, th) => {
+    setForm({ mode, id: th?.id });
+    setName(th ? th.name : "");
+    setColor(th ? th.color : PRESET_COLORS[0].value);
   };
   const save = () => {
     const n = name.trim();
     if (!n) return;
-    if (mode === "add" && onAdd) { const id = onAdd(n, color); if (id) onChange(id); }
-    if (mode === "edit" && onEdit && current) onEdit(current.id, n, color);
-    setMode(null);
+    if (form.mode === "add" && onAdd) { const id = onAdd(n, color); if (id) onChange(id); setOpen(false); }
+    if (form.mode === "edit" && onEdit) onEdit(form.id, n, color);
+    setForm(null);
   };
   return (
     <div>
       <div className="text-xs mb-1.5" style={{ color: C.textDim }}>📁 Dossier</div>
-      <div className="flex flex-wrap gap-1.5">
-        {themes.map((th) => {
-          const sel = th.id === value;
-          return (
-            <button key={th.id} type="button" onClick={() => { onChange(th.id); setMode(null); }}
-              className="px-3 py-1.5 rounded-full text-xs font-semibold"
-              style={{ background: sel ? th.color : "transparent", color: sel ? "#0B0810" : C.text, border: `1.5px solid ${th.color}` }}>
-              {th.name}
-            </button>
-          );
-        })}
-        {onEdit && current && (
-          <button type="button" onClick={() => open("edit")} title="Modifier ce dossier" aria-label="Modifier ce dossier"
-            className="w-8 h-8 rounded-full flex items-center justify-center" style={{ border: `1px solid ${C.borderStrong}`, color: C.textDim }}>
-            <Pencil size={13} />
-          </button>
-        )}
-        {onAdd && (
-          <button type="button" onClick={() => open("add")}
-            className="px-3 py-1.5 rounded-full text-xs font-semibold" style={{ border: `1px dashed ${C.borderStrong}`, color: C.textDim }}>
-            + Nouveau
-          </button>
-        )}
-      </div>
-      {mode && (
-        <div className="mt-2 rounded-xl p-3 space-y-2" style={{ background: C.surfaceRaised, border: `1px solid ${C.border}` }}>
-          <div className="text-xs font-semibold" style={{ color: C.textDim }}>{mode === "add" ? "Nouveau dossier" : "Modifier le dossier"}</div>
-          <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Nom du dossier"
-            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); save(); } }}
-            className="w-full rounded-md px-3 py-2 text-sm outline-none" style={{ background: C.bg, border: `1px solid ${C.borderStrong}`, color: C.text }} />
-          <div className="flex gap-2 flex-wrap">
-            {PRESET_COLORS.map((c) => (
-              <button key={c.value} type="button" onClick={() => setColor(c.value)} className="w-7 h-7 rounded-full flex items-center justify-center"
-                style={{ background: c.value, outline: color === c.value ? `2px solid ${C.text}` : "none", outlineOffset: 2 }}>
-                {color === c.value && <Check size={12} color="#0B0810" strokeWidth={3} />}
-              </button>
-            ))}
-          </div>
-          <div className="flex gap-2">
-            <button type="button" onClick={() => setMode(null)} className="flex-1 py-1.5 rounded-md text-xs" style={{ border: `1px solid ${C.borderStrong}`, color: C.textDim }}>Annuler</button>
-            <button type="button" disabled={!name.trim()} onClick={save} className="flex-1 py-1.5 rounded-md text-xs font-semibold disabled:opacity-40" style={{ background: C.accent, color: C.bg }}>OK</button>
-          </div>
-        </div>
+      <button type="button" onClick={() => { setOpen(true); setForm(null); }}
+        className="w-full flex items-center gap-2 rounded-md px-3 py-2.5 text-sm font-semibold text-left"
+        style={{ background: C.bg, border: `1px solid ${C.borderStrong}`, color: C.text }}>
+        <span className="w-3 h-3 rounded-full shrink-0" style={{ background: current?.color || C.textGhost }} />
+        <span className="flex-1 truncate">{current?.name || "Choisir un dossier"}</span>
+        <ChevronDown size={16} style={{ color: C.textDim }} />
+      </button>
+      {open && (
+        <Modal onClose={() => setOpen(false)}>
+          {!form ? (
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold" style={{ color: C.textDim }}>Choisir un dossier</h3>
+              <div className="space-y-1.5">
+                {themes.map((th) => {
+                  const sel = th.id === value;
+                  return (
+                    <div key={th.id} className="flex items-center gap-2">
+                      <button type="button" onClick={() => { onChange(th.id); setOpen(false); }}
+                        className="flex-1 flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-semibold text-left"
+                        style={{ background: sel ? th.color + "33" : C.surfaceRaised, border: `1.5px solid ${sel ? th.color : C.border}`, color: C.text }}>
+                        <span className="w-4 h-4 rounded-full shrink-0" style={{ background: th.color }} />
+                        <span className="flex-1 truncate">{th.name}</span>
+                        {sel && <Check size={16} style={{ color: th.color }} />}
+                      </button>
+                      {onEdit && (
+                        <button type="button" onClick={() => openForm("edit", th)} aria-label={"Modifier " + th.name}
+                          className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ border: `1px solid ${C.borderStrong}`, color: C.textDim }}>
+                          <Pencil size={14} />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button type="button" onClick={() => setOpen(false)} className="flex-1 py-2.5 rounded-md text-sm" style={{ border: `1px solid ${C.borderStrong}`, color: C.textDim }}>Fermer</button>
+                {onAdd && (
+                  <button type="button" onClick={() => openForm("add")} className="flex-1 py-2.5 rounded-md text-sm font-semibold" style={{ background: C.accent, color: C.bg }}>+ Nouveau</button>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold" style={{ color: C.textDim }}>{form.mode === "add" ? "Nouveau dossier" : "Modifier le dossier"}</h3>
+              <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Nom du dossier"
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); save(); } }}
+                className="w-full rounded-md px-3 py-2.5 text-base outline-none" style={{ background: C.bg, border: `1px solid ${C.borderStrong}`, color: C.text }} />
+              <div className="flex gap-2 flex-wrap">
+                {PRESET_COLORS.map((c) => (
+                  <button key={c.value} type="button" onClick={() => setColor(c.value)} className="w-8 h-8 rounded-full flex items-center justify-center"
+                    style={{ background: c.value, outline: color === c.value ? `2px solid ${C.text}` : "none", outlineOffset: 2 }}>
+                    {color === c.value && <Check size={14} color="#0B0810" strokeWidth={3} />}
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-2 pt-1">
+                <button type="button" onClick={() => setForm(null)} className="flex-1 py-2.5 rounded-md text-sm" style={{ border: `1px solid ${C.borderStrong}`, color: C.textDim }}>Retour</button>
+                <button type="button" disabled={!name.trim()} onClick={save} className="flex-1 py-2.5 rounded-md text-sm font-semibold disabled:opacity-40" style={{ background: C.accent, color: C.bg }}>OK</button>
+              </div>
+            </div>
+          )}
+        </Modal>
       )}
     </div>
   );
