@@ -15,7 +15,7 @@ if (typeof window !== "undefined") {
 }
 
 const STORAGE_KEY = "sly-todo-data";
-const APP_VERSION = "2026.08.28-38";
+const APP_VERSION = "2026.08.28-41";
 // Plafond de points dépensables (totalPoints − coffreSpent) : au-delà, les points ne s'accumulent plus.
 const POINTS_CAP = 10000;
 const flagColorOf = (t) => (t && t.kind === "prestation" ? "#8B5CF6" : t && t.subtype === "rdv" ? "#14B8A6" : "#F59E0B");
@@ -2744,7 +2744,7 @@ function SlyTodo() {
     }))
   );
 
-  const addTheme = (name, color) => persist({ ...data, themes: [...themes, { id: "th-" + uid(), name, color }] });
+  const addTheme = (name, color) => { const id = "th-" + uid(); persist((prev) => ({ ...prev, themes: [...(prev.themes || []), { id, name, color }] })); return id; };
 
   // ── Coffre à récompenses ──
   // Solde dépensable = total gagné à vie − déjà dépensé. Le total à vie ne bouge jamais.
@@ -2764,7 +2764,7 @@ function SlyTodo() {
     setGemReward({ points: 0, key: Date.now() });
   };
   const editTheme = (id, name, color) =>
-    persist({ ...data, themes: themes.map((t) => (t.id === id ? { ...t, name, color } : t)) });
+    persist((prev) => ({ ...prev, themes: (prev.themes || []).map((t) => (t.id === id ? { ...t, name, color } : t)) }));
   const deleteTheme = (id) => {
     persist({ ...data, themes: themes.filter((t) => t.id !== id), tasks: tasks.filter((t) => t.themeId !== id) });
     setOpenTheme(null);
@@ -4440,6 +4440,8 @@ function SlyTodo() {
               themes={themes}
               initial={modal.payload}
               gigRoles={settings?.gigRoles}
+              onAddTheme={addTheme}
+              onEditTheme={editTheme}
               onCancel={() => setModal(null)}
               onFinish={(fields) => { addTask(fields); setModal(null); }}
               onComplete={(draft) => setModal({ type: "addTask", payload: draft })}
@@ -4453,6 +4455,8 @@ function SlyTodo() {
               gigRoles={settings?.gigRoles}
               onAddGigRole={(role) => persist({ ...data, settings: { ...settings, gigRoles: [...(settings?.gigRoles || DEFAULT_GIG_ROLES), role] } })}
               onCreateChecklist={(name) => addChecklist(name, "📋", false)}
+              onAddTheme={addTheme}
+              onEditTheme={editTheme}
               onCancel={() => setModal(null)}
               onSave={(fields) => { addTask(fields); setModal(null); }}
             />
@@ -4465,6 +4469,8 @@ function SlyTodo() {
               gigRoles={settings?.gigRoles}
               onAddGigRole={(role) => persist({ ...data, settings: { ...settings, gigRoles: [...(settings?.gigRoles || DEFAULT_GIG_ROLES), role] } })}
               onCreateChecklist={(name) => addChecklist(name, "📋", false)}
+              onAddTheme={addTheme}
+              onEditTheme={editTheme}
               onCancel={() => setModal(null)}
               onDelete={() => { deleteTask(modal.payload.id); setModal(null); }}
               onSave={(fields) => { editTask(modal.payload.id, fields); setModal(null); }}
@@ -9421,6 +9427,77 @@ function QuizPlayer({ theme, onClose, onFinish, sound, quizSeenLog }) {
 }
 
 // ═════════════════════════════════════════════════════════════════
+// 📁 Choix du dossier : pastilles cliquables + ajout / modification sur place
+// ═════════════════════════════════════════════════════════════════
+function ThemePicker({ themes, value, onChange, onAdd, onEdit }) {
+  const [mode, setMode] = useState(null); // null | "add" | "edit"
+  const [name, setName] = useState("");
+  const [color, setColor] = useState(PRESET_COLORS[0].value);
+  const current = themes.find((t) => t.id === value);
+  const open = (m) => {
+    setMode(m);
+    setName(m === "edit" ? (current?.name || "") : "");
+    setColor(m === "edit" ? (current?.color || PRESET_COLORS[0].value) : PRESET_COLORS[0].value);
+  };
+  const save = () => {
+    const n = name.trim();
+    if (!n) return;
+    if (mode === "add" && onAdd) { const id = onAdd(n, color); if (id) onChange(id); }
+    if (mode === "edit" && onEdit && current) onEdit(current.id, n, color);
+    setMode(null);
+  };
+  return (
+    <div>
+      <div className="text-xs mb-1.5" style={{ color: C.textDim }}>📁 Dossier</div>
+      <div className="flex flex-wrap gap-1.5">
+        {themes.map((th) => {
+          const sel = th.id === value;
+          return (
+            <button key={th.id} type="button" onClick={() => { onChange(th.id); setMode(null); }}
+              className="px-3 py-1.5 rounded-full text-xs font-semibold"
+              style={{ background: sel ? th.color : "transparent", color: sel ? "#0B0810" : C.text, border: `1.5px solid ${th.color}` }}>
+              {th.name}
+            </button>
+          );
+        })}
+        {onEdit && current && (
+          <button type="button" onClick={() => open("edit")} title="Modifier ce dossier" aria-label="Modifier ce dossier"
+            className="w-8 h-8 rounded-full flex items-center justify-center" style={{ border: `1px solid ${C.borderStrong}`, color: C.textDim }}>
+            <Pencil size={13} />
+          </button>
+        )}
+        {onAdd && (
+          <button type="button" onClick={() => open("add")}
+            className="px-3 py-1.5 rounded-full text-xs font-semibold" style={{ border: `1px dashed ${C.borderStrong}`, color: C.textDim }}>
+            + Nouveau
+          </button>
+        )}
+      </div>
+      {mode && (
+        <div className="mt-2 rounded-xl p-3 space-y-2" style={{ background: C.surfaceRaised, border: `1px solid ${C.border}` }}>
+          <div className="text-xs font-semibold" style={{ color: C.textDim }}>{mode === "add" ? "Nouveau dossier" : "Modifier le dossier"}</div>
+          <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Nom du dossier"
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); save(); } }}
+            className="w-full rounded-md px-3 py-2 text-sm outline-none" style={{ background: C.bg, border: `1px solid ${C.borderStrong}`, color: C.text }} />
+          <div className="flex gap-2 flex-wrap">
+            {PRESET_COLORS.map((c) => (
+              <button key={c.value} type="button" onClick={() => setColor(c.value)} className="w-7 h-7 rounded-full flex items-center justify-center"
+                style={{ background: c.value, outline: color === c.value ? `2px solid ${C.text}` : "none", outlineOffset: 2 }}>
+                {color === c.value && <Check size={12} color="#0B0810" strokeWidth={3} />}
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <button type="button" onClick={() => setMode(null)} className="flex-1 py-1.5 rounded-md text-xs" style={{ border: `1px solid ${C.borderStrong}`, color: C.textDim }}>Annuler</button>
+            <button type="button" disabled={!name.trim()} onClick={save} className="flex-1 py-1.5 rounded-md text-xs font-semibold disabled:opacity-40" style={{ background: C.accent, color: C.bg }}>OK</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═════════════════════════════════════════════════════════════════
 // 📅 Bloc date (partagé entre la fiche complète et l'assistant de création)
 // ═════════════════════════════════════════════════════════════════
 function DateBlock({ kind, isEv, startDate, setStartDate, endDate, setEndDate, showEndDate, setShowEndDate, allDay, setAllDay, time, setTime, durationMode, setDurationMode, duration, setDuration, showInAgenda, setShowInAgenda, toConfirm, setToConfirm, onEndDateSet }) {
@@ -9516,12 +9593,11 @@ function DateBlock({ kind, isEv, startDate, setStartDate, endDate, setEndDate, s
 // ═════════════════════════════════════════════════════════════════
 // ➕ Assistant de création en cascade : Type → Désignation → Date → Fin
 // ═════════════════════════════════════════════════════════════════
-function AddWizard({ themes, initial, gigRoles, onCancel, onFinish, onComplete }) {
+function AddWizard({ themes, initial, gigRoles, onAddTheme, onEditTheme, onCancel, onFinish, onComplete }) {
   const [step, setStep] = useState(0);
   const [kind, setKind] = useState(null);
   const [title, setTitle] = useState("");
   const [themeId, setThemeId] = useState(initial?.themeId || themes[0]?.id);
-  const [showTheme, setShowTheme] = useState(false);
   const [startDate, setStartDate] = useState(initial?.startDate || "");
   const [endDate, setEndDate] = useState("");
   const [showEndDate, setShowEndDate] = useState(false);
@@ -9536,7 +9612,8 @@ function AddWizard({ themes, initial, gigRoles, onCancel, onFinish, onComplete }
     { id: "task",       emoji: "📋", label: "Tâche",       color: C.accent },
     { id: "event",      emoji: "🚩", label: "Événement",   color: "#F59E0B" },
     { id: "rdv",        emoji: "🤝", label: "Rendez-vous", color: "#14B8A6" },
-    { id: "prestation", emoji: "🎧", label: "Prestation",  color: "#8B5CF6" },
+    { id: "prestation", emoji: "🚧", label: "Prestation",  color: "#8B5CF6" },
+    { id: "chantier",   emoji: "🧭", label: "Tâche au long cours", color: "#38BDF8" },
   ];
   const meta = TYPES.find((t) => t.id === kind);
   const isEv = kind === "event" || kind === "rdv" || kind === "prestation";
@@ -9550,7 +9627,7 @@ function AddWizard({ themes, initial, gigRoles, onCancel, onFinish, onComplete }
     duration: finalDuration,
     time,
     themeId,
-    urgency: kind === "task" ? 2 : null,
+    urgency: (kind === "task" || kind === "chantier") ? 2 : null,
     recurrence: null,
     startDate: startDate || null,
     endDate: endDate || null,
@@ -9602,7 +9679,7 @@ function AddWizard({ themes, initial, gigRoles, onCancel, onFinish, onComplete }
         <div className="grid grid-cols-2 gap-3">
           {TYPES.map((t) => (
             <button key={t.id} type="button" onClick={() => { setKind(t.id); setStep(1); }}
-              className="rounded-xl py-5 flex flex-col items-center gap-1.5 font-semibold"
+              className={"rounded-xl py-5 flex flex-col items-center gap-1.5 font-semibold" + (t.id === "chantier" ? " col-span-2" : "")}
               style={{ background: C.surfaceRaised, border: `2px solid ${t.color}`, color: C.text }}>
               <span style={{ fontSize: 28 }}>{t.emoji}</span>
               <span className="text-sm">{t.label}</span>
@@ -9618,26 +9695,12 @@ function AddWizard({ themes, initial, gigRoles, onCancel, onFinish, onComplete }
       <div className="space-y-4">
         <Header back={() => setStep(0)}>Désignation</Header>
         <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Désignation"
-          onKeyDown={(e) => { if (e.key === "Enter" && canGo) setStep(2); }}
+          onKeyDown={(e) => { if (e.key === "Enter" && canGo) setStep(kind === "chantier" ? 3 : 2); }}
           className="w-full rounded-md px-3 py-2.5 text-base outline-none" style={{ background: C.bg, border: `1px solid ${C.borderStrong}`, color: C.text }} />
-        <div className="flex items-center gap-2">
-          <button type="button" onClick={() => setShowTheme((v) => !v)}
-            className="px-3 py-1.5 rounded-md text-xs font-semibold shrink-0"
-            style={{ background: showTheme ? C.accent : "transparent", color: showTheme ? C.bg : C.textDim, border: `1px solid ${showTheme ? C.accent : C.borderStrong}` }}>
-            📁 Dossier
-          </button>
-          {showTheme ? (
-            <select value={themeId} onChange={(e) => setThemeId(e.target.value)}
-              className="flex-1 min-w-0 rounded-md px-2 py-2 text-xs outline-none" style={{ background: C.bg, border: `1px solid ${C.borderStrong}`, color: C.text }}>
-              {themes.map((th) => <option key={th.id} value={th.id}>{th.name}</option>)}
-            </select>
-          ) : (
-            <span className="text-xs" style={{ color: C.textGhost }}>{themes.find((th) => th.id === themeId)?.name || ""}</span>
-          )}
-        </div>
+        <ThemePicker themes={themes} value={themeId} onChange={setThemeId} onAdd={onAddTheme} onEdit={onEditTheme} />
         <BtnRow>
           <Ghost onClick={() => onFinish(buildFields())}>Finir</Ghost>
-          <Main disabled={!canGo} onClick={() => setStep(2)}>Continuer</Main>
+          <Main disabled={!canGo} onClick={() => setStep(kind === "chantier" ? 3 : 2)}>Continuer</Main>
         </BtnRow>
       </div>
     );
@@ -9664,11 +9727,11 @@ function AddWizard({ themes, initial, gigRoles, onCancel, onFinish, onComplete }
   const dateTxt = startDate ? new Date(startDate + "T12:00:00").toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }) : "Sans date";
   return (
     <div className="space-y-4">
-      <Header back={() => setStep(2)}>Tout est prêt</Header>
+      <Header back={() => setStep(kind === "chantier" ? 1 : 2)}>Tout est prêt</Header>
       <div className="rounded-xl p-3 space-y-1" style={{ background: C.surfaceRaised, border: `1px solid ${C.border}` }}>
         <div className="text-base font-semibold" style={{ color: C.text }}>{title}</div>
         <div className="text-xs" style={{ color: C.textDim }}>
-          {dateTxt}{endDate ? ` → ${new Date(endDate + "T12:00:00").toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}` : ""}
+          {kind === "chantier" ? "À suivre au fil des jours" : dateTxt}{kind === "chantier" ? "" : endDate ? ` → ${new Date(endDate + "T12:00:00").toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}` : ""}
           {allDay ? " · toute la journée" : time ? ` · ${time}` : ""}
           {isEv && toConfirm ? " · à confirmer" : ""}
         </div>
@@ -9681,7 +9744,7 @@ function AddWizard({ themes, initial, gigRoles, onCancel, onFinish, onComplete }
   );
 }
 
-function TaskForm({ themes, initial, onCancel, onSave, onDelete, checklists, gigRoles, onAddGigRole, onCreateChecklist }) {
+function TaskForm({ themes, initial, onCancel, onSave, onDelete, checklists, gigRoles, onAddGigRole, onCreateChecklist, onAddTheme, onEditTheme }) {
   const isNew = !initial?.id;
   const [title, setTitle] = useState(initial?.title || "");
   const initialMode = !("duration" in (initial || {}))
@@ -9811,7 +9874,7 @@ function TaskForm({ themes, initial, onCancel, onSave, onDelete, checklists, gig
     task:       { label: "📋 Tâche",       bg: C.accent,   fg: C.bg },
     event:      { label: "🚩 Événement",   bg: "#F59E0B",  fg: "#0B0810" },
     rdv:        { label: "🤝 Rendez-vous", bg: "#14B8A6",  fg: "#0B0810" },
-    prestation: { label: "🚩 Prestation",  bg: "#8B5CF6",  fg: "#FFFFFF" },
+    prestation: { label: "🚧 Prestation",  bg: "#8B5CF6",  fg: "#FFFFFF" },
     chantier:   { label: "🧭 Long cours",   bg: "#38BDF8",  fg: "#0B0810" },
   };
   const kindMeta = KIND_META[kind] || KIND_META.task;
@@ -9824,11 +9887,8 @@ function TaskForm({ themes, initial, onCancel, onSave, onDelete, checklists, gig
           style={{ background: kindMeta.bg, color: kindMeta.fg, border: `1px solid ${kindMeta.bg}` }}>
           {kindMeta.label}
         </button>
-        <select value={themeId} onChange={(e) => setThemeId(e.target.value)}
-          className="flex-1 rounded-md px-2 py-2 text-xs outline-none" style={{ background: C.bg, border: `1px solid ${C.borderStrong}`, color: C.text }}>
-          {themes.map((th) => <option key={th.id} value={th.id}>{th.name}</option>)}
-        </select>
       </div>
+      <ThemePicker themes={themes} value={themeId} onChange={setThemeId} onAdd={onAddTheme} onEdit={onEditTheme} />
 
       <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Désignation"
         className="w-full rounded-md px-3 py-2 text-base outline-none" style={{ background: C.bg, border: `1px solid ${C.borderStrong}`, color: C.text }} />
@@ -10230,7 +10290,7 @@ function GaugeDetailModal({ kind, percent, doneCount, totalCount, briefCount, on
 function TaskDetailView({ task, themes, checklists, onClose, onEdit }) {
   const theme = themes.find((th) => th.id === task.themeId);
   const linkedChecklist = (checklists || []).find((c) => c.id === task.checklistId);
-  const KIND_LABELS = { task: "📋 Tâche", event: "🚩 Événement", rdv: "🤝 Rendez-vous", prestation: "🚩 Prestation", chantier: "🧭 Tâche au long cours" };
+  const KIND_LABELS = { task: "📋 Tâche", event: "🚩 Événement", rdv: "🤝 Rendez-vous", prestation: "🚧 Prestation", chantier: "🧭 Tâche au long cours" };
   const Row = ({ label, children }) => (
     <div className="flex items-start justify-between gap-3 py-2" style={{ borderBottom: `1px solid ${C.border}` }}>
       <span className="text-xs shrink-0" style={{ color: C.textFaint }}>{label}</span>
