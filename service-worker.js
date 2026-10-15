@@ -1,4 +1,4 @@
-const CACHE_NAME = "toutdoux-cache-2026-10-07-v46-style-harmonise";
+const CACHE_NAME = "toutdoux-cache-2026-10-15-v47-supprimer-longcours";
 const ASSETS = ["./", "./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", (event) => {

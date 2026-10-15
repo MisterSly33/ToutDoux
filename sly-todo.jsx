@@ -15,7 +15,7 @@ if (typeof window !== "undefined") {
 }
 
 const STORAGE_KEY = "sly-todo-data";
-const APP_VERSION = "2026.08.28-46";
+const APP_VERSION = "2026.08.28-47";
 // Plafond de points dépensables (totalPoints − coffreSpent) : au-delà, les points ne s'accumulent plus.
 const POINTS_CAP = 10000;
 // Icône des prestations : la route (point commun à tous les métiers)
@@ -7456,11 +7456,11 @@ function AgendaView({ tasks, themes, onEdit, onAddOnDate, onToggleDone, onViewDe
   const [showEvents, setShowEvents] = useState(true);
   const [showPrestations, setShowPrestations] = useState(true);
   const [showRdv, setShowRdv] = useState(true);
-  const [showChantiers, setShowChantiers] = useState(true);
+  const [showChantierList, setShowChantierList] = useState(false);
   const [showPast, setShowPast] = useState(false);
 
   const wellbeingThemeIds = new Set(themes.filter((th) => th.wellbeing).map((th) => th.id));
-  const matchesKind = (t) => (t.kind === "prestation" ? showPrestations : t.kind === "chantier" ? showChantiers : t.kind === "event" ? (t.subtype === "rdv" ? showRdv : showEvents) : showTasks);
+  const matchesKind = (t) => (t.kind === "prestation" ? showPrestations : t.kind === "chantier" ? false : t.kind === "event" ? (t.subtype === "rdv" ? showRdv : showEvents) : showTasks);
 
   const renderItemRow = (t) => {
     const theme = themes.find((th) => th.id === t.themeId);
@@ -7601,16 +7601,50 @@ function AgendaView({ tasks, themes, onEdit, onAddOnDate, onToggleDone, onViewDe
           { k: "event",      label: "Événem.",    on: showEvents,      set: setShowEvents,      color: "#F59E0B" },
           { k: "rdv",        label: "RDV",        on: showRdv,         set: setShowRdv,         color: "#14B8A6" },
           { k: "prestation", label: "Prest.",     on: showPrestations, set: setShowPrestations, color: "#8B5CF6" },
-          { k: "chantier",   label: "Long cours", on: showChantiers,   set: setShowChantiers,   color: "#38BDF8" },
+          { k: "chantier",   label: "Long cours", on: false,            set: () => setShowChantierList(true), color: "#38BDF8", isButton: true },
         ].map((f) => (
-          <button key={f.k} type="button" onClick={() => f.set((v) => !v)}
+          <button key={f.k} type="button" onClick={() => (f.isButton ? f.set() : f.set((v) => !v))}
             className="flex flex-col items-center justify-center gap-1 py-2 rounded-xl"
-            style={{ background: C.surfaceRaised, border: "3px solid " + (f.on ? f.color : "transparent"), boxShadow: f.on ? "none" : `inset 0 0 0 1.5px ${C.border}`, opacity: f.on ? 1 : 0.55 }}>
+            style={{ background: C.surfaceRaised, border: "3px solid " + (f.on ? f.color : "transparent"), boxShadow: f.on ? "none" : `inset 0 0 0 1.5px ${C.border}`, opacity: f.on || f.isButton ? 1 : 0.55 }}>
             <KindIcon kind={f.k} size={18} />
             <span className="text-[10px] font-bold leading-none" style={{ color: C.text }}>{f.label}</span>
           </button>
         ))}
       </div>
+
+      {showChantierList && (() => {
+        const list = tasks.filter((t) => t.kind === "chantier" && !t.cancelled && !t.done)
+          .sort((a, b) => (b.urgency || 2) - (a.urgency || 2) || (a.dueDate || "9999").localeCompare(b.dueDate || "9999"));
+        return (
+          <Modal onClose={() => setShowChantierList(false)}>
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold" style={{ color: C.textDim }}>🧭 Tâches au long cours</h3>
+              {list.length === 0 && <p className="text-sm py-4 text-center" style={{ color: C.textDim }}>Aucune tâche au long cours en cours.</p>}
+              <div className="space-y-2">
+                {list.map((t) => {
+                  const theme = themes.find((th) => th.id === t.themeId);
+                  return (
+                    <button key={t.id} type="button" onClick={() => { setShowChantierList(false); onEdit(t); }}
+                      className="w-full flex items-center gap-3 rounded-xl px-3 py-3 text-left"
+                      style={{ background: C.surfaceRaised, border: `1px solid ${C.border}`, color: C.text }}>
+                      <UrgencyDot urgency={t.urgency || 2} />
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-sm font-medium leading-snug line-clamp-2">{t.title}</span>
+                        <span className="flex items-center gap-2 mt-0.5 text-[11px]" style={{ color: C.textDim }}>
+                          {theme && <span style={{ color: theme.color }}>{theme.name}</span>}
+                          {t.dueDate && <span>échéance {formatDateFr(t.dueDate)}</span>}
+                        </span>
+                      </span>
+                      <Pencil size={14} style={{ color: C.textGhost }} />
+                    </button>
+                  );
+                })}
+              </div>
+              <button type="button" onClick={() => setShowChantierList(false)} className="w-full py-2.5 rounded-md text-sm" style={{ border: `1px solid ${C.borderStrong}`, color: C.textDim }}>Fermer</button>
+            </div>
+          </Modal>
+        );
+      })()}
 
       {viewMode === "calendar" ? (
         <>
@@ -10451,16 +10485,7 @@ function TaskActionsMenu({ task, onToggleDone, onFollowUp, onPostpone, onEdit, o
           <Copy size={17} style={{ color: C.textDim }} />
           Dupliquer
         </button>
-        {task.kind === "task" ? (
-          <button
-            onClick={onDelete}
-            className="w-full flex items-center gap-3 px-3 py-3 rounded-md text-sm font-medium text-left"
-            style={{ background: C.bg, border: `1px solid ${C.borderStrong}`, color: C.text }}
-          >
-            <Trash2 size={17} style={{ color: C.danger }} />
-            Supprimer la tâche
-          </button>
-        ) : (
+        {task.kind !== "task" && (
           <button
             onClick={onToggleCancel}
             className="w-full flex items-center gap-3 px-3 py-3 rounded-md text-sm font-medium text-left"
@@ -10470,6 +10495,14 @@ function TaskActionsMenu({ task, onToggleDone, onFollowUp, onPostpone, onEdit, o
             {task.cancelled ? "Réactiver" : "Annuler"}
           </button>
         )}
+        <button
+          onClick={onDelete}
+          className="w-full flex items-center gap-3 px-3 py-3 rounded-md text-sm font-medium text-left"
+          style={{ background: C.bg, border: `1px solid ${C.borderStrong}`, color: C.text }}
+        >
+          <Trash2 size={17} style={{ color: C.danger }} />
+          {task.kind === "task" ? "Supprimer la tâche" : "Supprimer"}
+        </button>
       </div>
       <button onClick={onClose} className="w-full py-2 rounded-md text-sm" style={{ border: `1px solid ${C.borderStrong}`, color: C.textDim }}>
         Fermer
