@@ -15,7 +15,7 @@ if (typeof window !== "undefined") {
 }
 
 const STORAGE_KEY = "sly-todo-data";
-const APP_VERSION = "2026.08.28-44";
+const APP_VERSION = "2026.08.28-45";
 // Plafond de points dépensables (totalPoints − coffreSpent) : au-delà, les points ne s'accumulent plus.
 const POINTS_CAP = 10000;
 // Icône des prestations : la route (point commun à tous les métiers)
@@ -23,7 +23,13 @@ const PRESTA_SIGN_SRC = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAABgC
 function PrestaIcon({ size = 20 }) {
   return <img src={PRESTA_SIGN_SRC} alt="" width={size} height={size} style={{ display: "inline-block", verticalAlign: "middle" }} />;
 }
-const flagColorOf = (t) => (t && t.kind === "prestation" ? "#8B5CF6" : t && t.subtype === "rdv" ? "#14B8A6" : "#F59E0B");
+const KIND_EMOJI = { task: "📋", event: "🚩", rdv: "🤝", chantier: "🧭" };
+const kindKeyOf = (t) => (t && t.kind === "event" && t.subtype === "rdv" ? "rdv" : (t && t.kind) || "task");
+function KindIcon({ kind, size = 16 }) {
+  if (kind === "prestation") return <PrestaIcon size={size + 2} />;
+  return <span style={{ fontSize: size, lineHeight: 1 }}>{KIND_EMOJI[kind] || "📋"}</span>;
+}
+const flagColorOf = (t) => (t && t.kind === "prestation" ? "#8B5CF6" : t && t.subtype === "rdv" ? "#14B8A6" : t && t.kind === "chantier" ? "#38BDF8" : t && t.kind === "task" ? "#A78BFA" : "#F59E0B");
 
 // ── Pleines lunes ──
 // Calcule la phase lunaire (0 = nouvelle lune, 0.5 = pleine lune) pour une date.
@@ -7045,7 +7051,7 @@ function TodayView({ tasks, themes, pulseId, onToggleDone, onRemove, onMove, onE
         }}>
           <div className="flex items-center gap-2 mb-0.5">
             {!t.done && !t.cancelled && !isWellbeing && (
-              isEvent ? <Flag size={12} fill={flagColor} style={{ color: flagColor, flexShrink: 0 }} /> : <UrgencyDot urgency={t.urgency || 2} />
+              isEvent ? <span className="shrink-0 inline-flex"><KindIcon kind={kindKeyOf(t)} size={13} /></span> : <UrgencyDot urgency={t.urgency || 2} />
             )}
             <div
               className="text-base leading-snug font-medium flex-1 min-w-0 line-clamp-2"
@@ -7385,7 +7391,7 @@ function MonthCalendar({ tasks, themes, monthDate, onPrevMonth, onNextMonth, sel
   const todayISO = todayISODate();
 
   const wellbeingThemeIds = new Set(themes.filter((th) => th.wellbeing).map((th) => th.id));
-  const itemsOn = (iso) => tasks.filter((t) => !t.done && !t.cancelled && (t.kind !== "task" || t.dueDate || t.startDate) && (t.startDate || t.dueDate) && !wellbeingThemeIds.has(t.themeId) && t.showInAgenda !== false && taskCoversDate(t, iso));
+  const itemsOn = (iso) => tasks.filter((t) => !t.done && !t.cancelled && (t.kind !== "task" || t.dueDate || t.startDate) && (t.startDate || t.dueDate) && !wellbeingThemeIds.has(t.themeId) && taskCoversDate(t, iso));
 
   const monthLabel = monthDate.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
 
@@ -7449,10 +7455,12 @@ function AgendaView({ tasks, themes, onEdit, onAddOnDate, onToggleDone, onViewDe
   const [showTasks, setShowTasks] = useState(true);
   const [showEvents, setShowEvents] = useState(true);
   const [showPrestations, setShowPrestations] = useState(true);
+  const [showRdv, setShowRdv] = useState(true);
+  const [showChantiers, setShowChantiers] = useState(true);
   const [showPast, setShowPast] = useState(false);
 
   const wellbeingThemeIds = new Set(themes.filter((th) => th.wellbeing).map((th) => th.id));
-  const matchesKind = (t) => (t.kind === "prestation" ? showPrestations : t.kind === "event" ? showEvents : showTasks);
+  const matchesKind = (t) => (t.kind === "prestation" ? showPrestations : t.kind === "chantier" ? showChantiers : t.kind === "event" ? (t.subtype === "rdv" ? showRdv : showEvents) : showTasks);
 
   const renderItemRow = (t) => {
     const theme = themes.find((th) => th.id === t.themeId);
@@ -7466,10 +7474,15 @@ function AgendaView({ tasks, themes, onEdit, onAddOnDate, onToggleDone, onViewDe
         className="rounded-lg px-3 py-3 mb-2 flex items-center gap-3 relative"
         style={{ background: C.surface, border: `1px solid ${overdue && !isCancelled ? "#5C1E33" : C.border}`, opacity: isCancelled ? 0.55 : isDoneEvent ? 0.6 : 1 }}
       >
+        {(isCancelled || t.kind === "task" || t.kind === "chantier") && (
+          <div className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0" style={{ background: flagColorOf(t) + "22" }}>
+            <KindIcon kind={kindKeyOf(t)} size={14} />
+          </div>
+        )}
         {!isCancelled && (t.kind === "event" || t.kind === "prestation") && (
           <button onClick={(e) => { e.stopPropagation(); onToggleDone(t.id); }} className="shrink-0" aria-label={isDoneEvent ? "Marquer non fait" : "Valider"} title={isDoneEvent ? "Marquer non fait" : "Valider"}>
             <div className="w-6 h-6 rounded-lg flex items-center justify-center" style={{ background: isDoneEvent ? "#22C55E" : flagColorOf(t) + "22" }}>
-              {isDoneEvent ? <Check size={14} color="#0B0810" strokeWidth={3} /> : <Flag size={13} style={{ color: flagColorOf(t) }} fill={flagColorOf(t)} />}
+              {isDoneEvent ? <Check size={14} color="#0B0810" strokeWidth={3} /> : <KindIcon kind={kindKeyOf(t)} size={14} />}
             </div>
           </button>
         )}
@@ -7490,7 +7503,7 @@ function AgendaView({ tasks, themes, onEdit, onAddOnDate, onToggleDone, onViewDe
   };
 
   const items = tasks
-    .filter((t) => (t.kind === "task" ? !t.done : true) && !t.cancelled && (t.kind !== "task" || t.dueDate || t.startDate) && (t.startDate || t.dueDate) && !wellbeingThemeIds.has(t.themeId) && t.showInAgenda !== false && matchesKind(t))
+    .filter((t) => (t.kind === "task" ? !t.done : true) && !t.cancelled && (t.kind !== "task" || t.dueDate || t.startDate) && (t.startDate || t.dueDate) && !wellbeingThemeIds.has(t.themeId) && matchesKind(t))
     .flatMap((t) => {
       // Étale les événements/prestations multi-jours sur CHAQUE jour couvert
       // (pas seulement leur date de début) — un dueDate reste, lui, ponctuel.
@@ -7552,7 +7565,7 @@ function AgendaView({ tasks, themes, onEdit, onAddOnDate, onToggleDone, onViewDe
   });
 
   const selectedDayItems = tasks.filter(
-    (t) => !t.done && !t.cancelled && (t.kind !== "task" || t.dueDate || t.startDate) && (t.startDate || t.dueDate) && !wellbeingThemeIds.has(t.themeId) && t.showInAgenda !== false && taskCoversDate(t, selectedDate) && matchesKind(t)
+    (t) => !t.done && !t.cancelled && (t.kind !== "task" || t.dueDate || t.startDate) && (t.startDate || t.dueDate) && !wellbeingThemeIds.has(t.themeId) && taskCoversDate(t, selectedDate) && matchesKind(t)
   );
 
   return (
@@ -7582,22 +7595,21 @@ function AgendaView({ tasks, themes, onEdit, onAddOnDate, onToggleDone, onViewDe
         </div>
       </div>
 
-      <div className="flex items-center gap-2 mb-4">
-        <button onClick={() => setShowTasks((v) => !v)}
-          className="text-xs font-semibold px-3 py-1.5 rounded-full"
-          style={{ background: showTasks ? C.accent : "transparent", color: showTasks ? C.bg : C.textDim, border: `1px solid ${showTasks ? C.accent : C.borderStrong}` }}>
-          Tâches
-        </button>
-        <button onClick={() => setShowEvents((v) => !v)}
-          className="text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-1.5"
-          style={{ background: showEvents ? "#F59E0B" : "transparent", color: showEvents ? "#0B0810" : C.textDim, border: `1px solid ${showEvents ? "#F59E0B" : C.borderStrong}` }}>
-          <Flag size={12} fill={showEvents ? "#0B0810" : "none"} /> Événements
-        </button>
-        <button onClick={() => setShowPrestations((v) => !v)}
-          className="text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-1.5"
-          style={{ background: showPrestations ? "#8B5CF6" : "transparent", color: showPrestations ? "#FFFFFF" : C.textDim, border: `1px solid ${showPrestations ? "#8B5CF6" : C.borderStrong}` }}>
-          <Flag size={12} fill={showPrestations ? "#FFFFFF" : "none"} /> Prestations
-        </button>
+      <div className="grid grid-cols-5 gap-1.5 mb-4">
+        {[
+          { k: "task",       label: "Tâches",     on: showTasks,       set: setShowTasks,       color: "#A78BFA" },
+          { k: "event",      label: "Événem.",    on: showEvents,      set: setShowEvents,      color: "#F59E0B" },
+          { k: "rdv",        label: "RDV",        on: showRdv,         set: setShowRdv,         color: "#14B8A6" },
+          { k: "prestation", label: "Prest.",     on: showPrestations, set: setShowPrestations, color: "#8B5CF6" },
+          { k: "chantier",   label: "Long cours", on: showChantiers,   set: setShowChantiers,   color: "#38BDF8" },
+        ].map((f) => (
+          <button key={f.k} type="button" onClick={() => f.set((v) => !v)}
+            className="flex flex-col items-center justify-center gap-1 py-2 rounded-xl"
+            style={{ background: f.on ? f.color : "transparent", border: `1.5px solid ${f.on ? f.color : C.borderStrong}`, opacity: f.on ? 1 : 0.75 }}>
+            <KindIcon kind={f.k} size={18} />
+            <span className="text-[10px] font-bold leading-none" style={{ color: f.on ? "#0B0810" : C.textDim }}>{f.label}</span>
+          </button>
+        ))}
       </div>
 
       {viewMode === "calendar" ? (
@@ -8204,7 +8216,7 @@ function ChecklistsView({ checklists, onOpen, onAddChecklist, onRenameChecklist,
               <div className="text-[11px]" style={{ color: C.textGhost }}>{total} objet{total > 1 ? "s" : ""}{!isTpl && total > 0 ? ` · ${ok}/${total} prêts` : ""}</div>
               {linkedTask && (
                 <div className="text-[11px] flex items-center gap-1 mt-0.5" style={{ color: C.accentLight }}>
-                  🔗 <Flag size={10} fill={flagColorOf(linkedTask)} style={{ color: flagColorOf(linkedTask) }} /> {linkedTask.title}
+                  🔗 <KindIcon kind={kindKeyOf(linkedTask)} size={11} /> {linkedTask.title}
                 </div>
               )}
             </button>
@@ -9631,16 +9643,6 @@ function DateBlock({ kind, isEv, startDate, setStartDate, endDate, setEndDate, s
         <DurationPicker value={duration} onChange={setDuration} />
       )}
 
-      <div className="flex items-center gap-2">
-        <span className="text-sm flex-1" style={{ color: C.text }}>Dans l'agenda ?</span>
-        {[{ v: true, l: "Oui" }, { v: false, l: "Non" }].map((o) => (
-          <button key={o.l} type="button" onClick={() => setShowInAgenda(o.v)}
-            className="px-4 py-1.5 rounded-md text-xs font-semibold"
-            style={{ background: showInAgenda === o.v ? C.accent : "transparent", color: showInAgenda === o.v ? C.bg : C.textDim, border: `1px solid ${showInAgenda === o.v ? C.accent : C.borderStrong}` }}>
-            {o.l}
-          </button>
-        ))}
-      </div>
       {isEv && <Toggle on={toConfirm} onClick={() => setToConfirm(!toConfirm)} label="À confirmer" />}
     </div>
   );
@@ -9691,7 +9693,7 @@ function AddWizard({ themes, initial, gigRoles, onAddTheme, onEditTheme, onCance
     allDay,
     points: null,
     contacts: null,
-    showInAgenda,
+    showInAgenda: true,
     notes: null,
     gigRole: kind === "prestation" ? (gigRoles || DEFAULT_GIG_ROLES)[0] : null,
     gigLocation: kind === "prestation" ? { address: "", city: "", zip: "" } : null,
@@ -9706,7 +9708,7 @@ function AddWizard({ themes, initial, gigRoles, onAddTheme, onEditTheme, onCance
   const buildDraft = () => ({
     themeId, title: title.trim(), kind: realKind, subtype: kind === "rdv" ? "rdv" : null,
     startDate: startDate || null, endDate: endDate || null, allDay, time,
-    duration: durationMode === "brief" ? null : duration, showInAgenda,
+    duration: durationMode === "brief" ? null : duration,
     eventStatus: isEv ? (toConfirm ? "option" : "confirme") : null,
   });
 
@@ -9909,7 +9911,7 @@ function TaskForm({ themes, initial, onCancel, onSave, onDelete, checklists, gig
       allDay,
       points: customPoints != null ? customPoints : null,
       contacts: contacts.length ? contacts : null,
-      showInAgenda: showInAgenda,
+      showInAgenda: true,
       notes: notes.trim() || null,
       gigRole: kind === "prestation" ? gigRole : null,
       gigLocation: kind === "prestation" ? { address: gigAddress.trim(), city: gigCity.trim(), zip: gigZip.trim() } : null,
