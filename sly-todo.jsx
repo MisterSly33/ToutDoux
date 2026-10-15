@@ -15,7 +15,7 @@ if (typeof window !== "undefined") {
 }
 
 const STORAGE_KEY = "sly-todo-data";
-const APP_VERSION = "2026.08.28-45";
+const APP_VERSION = "2026.08.28-46";
 // Plafond de points dépensables (totalPoints − coffreSpent) : au-delà, les points ne s'accumulent plus.
 const POINTS_CAP = 10000;
 // Icône des prestations : la route (point commun à tous les métiers)
@@ -7597,7 +7597,7 @@ function AgendaView({ tasks, themes, onEdit, onAddOnDate, onToggleDone, onViewDe
 
       <div className="grid grid-cols-5 gap-1.5 mb-4">
         {[
-          { k: "task",       label: "Tâches",     on: showTasks,       set: setShowTasks,       color: "#A78BFA" },
+          { k: "task",       label: "Tâches",     on: showTasks,       set: setShowTasks,       color: C.accent },
           { k: "event",      label: "Événem.",    on: showEvents,      set: setShowEvents,      color: "#F59E0B" },
           { k: "rdv",        label: "RDV",        on: showRdv,         set: setShowRdv,         color: "#14B8A6" },
           { k: "prestation", label: "Prest.",     on: showPrestations, set: setShowPrestations, color: "#8B5CF6" },
@@ -7605,9 +7605,9 @@ function AgendaView({ tasks, themes, onEdit, onAddOnDate, onToggleDone, onViewDe
         ].map((f) => (
           <button key={f.k} type="button" onClick={() => f.set((v) => !v)}
             className="flex flex-col items-center justify-center gap-1 py-2 rounded-xl"
-            style={{ background: f.on ? f.color : "transparent", border: `1.5px solid ${f.on ? f.color : C.borderStrong}`, opacity: f.on ? 1 : 0.75 }}>
+            style={{ background: C.surfaceRaised, border: "3px solid " + (f.on ? f.color : "transparent"), boxShadow: f.on ? "none" : `inset 0 0 0 1.5px ${C.border}`, opacity: f.on ? 1 : 0.55 }}>
             <KindIcon kind={f.k} size={18} />
-            <span className="text-[10px] font-bold leading-none" style={{ color: f.on ? "#0B0810" : C.textDim }}>{f.label}</span>
+            <span className="text-[10px] font-bold leading-none" style={{ color: C.text }}>{f.label}</span>
           </button>
         ))}
       </div>
@@ -9667,11 +9667,11 @@ function AddWizard({ themes, initial, gigRoles, onAddTheme, onEditTheme, onCance
   const [toConfirm, setToConfirm] = useState(false);
 
   const TYPES = [
-    { id: "task",       emoji: "📋", label: "Tâche",       color: C.accent },
-    { id: "event",      emoji: "🚩", label: "Événement",   color: "#F59E0B" },
-    { id: "rdv",        emoji: "🤝", label: "Rendez-vous", color: "#14B8A6" },
-    { id: "prestation", emoji: <PrestaIcon size={34} />, label: "Prestation",  color: "#8B5CF6" },
-    { id: "chantier",   emoji: "🧭", label: "Tâche au long cours", color: "#38BDF8" },
+    { id: "task",       emoji: "📋", label: "Tâche",               hint: "Une action à faire",               color: C.accent },
+    { id: "event",      emoji: "🚩", label: "Événement",           hint: "Une date repère",                  color: "#F59E0B" },
+    { id: "rdv",        emoji: "🤝", label: "Rendez-vous",         hint: "Avec quelqu'un, à une heure",      color: "#14B8A6" },
+    { id: "prestation", emoji: <PrestaIcon size={34} />, label: "Prestation", hint: "Un job : DJ, cuisine, travaux", color: "#8B5CF6" },
+    { id: "chantier",   emoji: "🧭", label: "Tâche au long cours", hint: "À suivre au fil des jours",        color: "#38BDF8" },
   ];
   const meta = TYPES.find((t) => t.id === kind);
   const isEv = kind === "event" || kind === "rdv" || kind === "prestation";
@@ -9734,13 +9734,17 @@ function AddWizard({ themes, initial, gigRoles, onAddTheme, onEditTheme, onCance
     return (
       <div className="space-y-4">
         <Header>Que veux-tu ajouter ?</Header>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-2.5">
           {TYPES.map((t) => (
             <button key={t.id} type="button" onClick={() => { setKind(t.id); setStep(1); }}
-              className={"rounded-xl py-5 flex flex-col items-center gap-1.5 font-semibold" + (t.id === "chantier" ? " col-span-2" : "")}
-              style={{ background: C.surfaceRaised, border: `2px solid ${t.color}`, color: C.text }}>
-              <span style={{ fontSize: 28, lineHeight: 1 }}>{t.emoji}</span>
-              <span className="text-sm">{t.label}</span>
+              className="w-full flex items-center gap-4 rounded-2xl px-4 py-3 text-left active:scale-[0.98] transition-transform"
+              style={{ background: C.surfaceRaised, border: `3px solid transparent`, boxShadow: `inset 0 0 0 1.5px ${C.border}`, color: C.text }}>
+              <span className="w-10 h-10 flex items-center justify-center shrink-0" style={{ fontSize: 28, lineHeight: 1 }}>{t.emoji}</span>
+              <span className="flex-1 min-w-0">
+                <span className="block text-base font-semibold leading-tight">{t.label}</span>
+                <span className="block text-xs mt-0.5" style={{ color: C.textDim }}>{t.hint}</span>
+              </span>
+              <ChevronRight size={18} style={{ color: C.textGhost }} />
             </button>
           ))}
         </div>
