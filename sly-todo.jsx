@@ -15,7 +15,7 @@ if (typeof window !== "undefined") {
 }
 
 const STORAGE_KEY = "sly-todo-data";
-const APP_VERSION = "2026.08.28-47";
+const APP_VERSION = "2026.08.28-48";
 // Plafond de points dépensables (totalPoints − coffreSpent) : au-delà, les points ne s'accumulent plus.
 const POINTS_CAP = 10000;
 // Icône des prestations : la route (point commun à tous les métiers)
@@ -7382,7 +7382,7 @@ function TodayView({ tasks, themes, pulseId, onToggleDone, onRemove, onMove, onE
   );
 }
 
-function MonthCalendar({ tasks, themes, monthDate, onPrevMonth, onNextMonth, selectedDate, onSelectDate }) {
+function MonthCalendar({ tasks, themes, monthDate, onPrevMonth, onNextMonth, selectedDate, onSelectDate, kindFilter }) {
   const year = monthDate.getFullYear();
   const month = monthDate.getMonth();
   const firstOfMonth = new Date(year, month, 1);
@@ -7391,7 +7391,7 @@ function MonthCalendar({ tasks, themes, monthDate, onPrevMonth, onNextMonth, sel
   const todayISO = todayISODate();
 
   const wellbeingThemeIds = new Set(themes.filter((th) => th.wellbeing).map((th) => th.id));
-  const itemsOn = (iso) => tasks.filter((t) => !t.done && !t.cancelled && (t.kind !== "task" || t.dueDate || t.startDate) && (t.startDate || t.dueDate) && !wellbeingThemeIds.has(t.themeId) && taskCoversDate(t, iso));
+  const itemsOn = (iso) => tasks.filter((t) => !t.done && !t.cancelled && (t.kind !== "task" || t.dueDate || t.startDate) && (t.startDate || t.dueDate) && !wellbeingThemeIds.has(t.themeId) && taskCoversDate(t, iso) && (!kindFilter || kindFilter(t)));
 
   const monthLabel = monthDate.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
 
@@ -7439,7 +7439,13 @@ function MonthCalendar({ tasks, themes, monthDate, onPrevMonth, onNextMonth, sel
               ) : (
                 <span>{d}</span>
               )}
-              {hasItems && <span className="w-1.5 h-1.5 rounded-full" style={{ background: overdue ? C.danger : "#F5C84C" }} />}
+              {hasItems && (
+                <span className="flex items-center gap-0.5">
+                  {[...new Set(dayItems.map((t) => flagColorOf(t)))].slice(0, 4).map((col) => (
+                    <span key={col} className="w-1.5 h-1.5 rounded-full" style={{ background: col }} />
+                  ))}
+                </span>
+              )}
             </button>
           );
         })}
@@ -7656,6 +7662,7 @@ function AgendaView({ tasks, themes, onEdit, onAddOnDate, onToggleDone, onViewDe
             onNextMonth={() => setMonthDate((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1))}
             selectedDate={selectedDate}
             onSelectDate={setSelectedDate}
+            kindFilter={matchesKind}
           />
           <div className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: C.textFaint }}>
             {agendaDateHeader(selectedDate)}
