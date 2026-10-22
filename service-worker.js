@@ -1,4 +1,4 @@
-const CACHE_NAME = "toutdoux-cache-2026-10-19-v50b-manifest-icones";
+const CACHE_NAME = "toutdoux-cache-2026-10-19-v51-checklists-import";
 const ASSETS = ["./", "./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png", "./apple-touch-icon-180.png", "./favicon-64.png"];
 
 self.addEventListener("install", (event) => {
